@@ -1,0 +1,26 @@
+{
+  "name": "@jobpilot/agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "node --watch dist/worker.js",
+    "start": "node dist/worker.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.54.0",
+    "@jobpilot/resume-engine": "workspace:*",
+    "@jobpilot/job-scraper": "workspace:*",
+    "@jobpilot/shared": "workspace:*",
+    "@supabase/supabase-js": "^2.46.2",
+    "bullmq": "^5.36.0",
+    "ioredis": "^5.4.2",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  }
+}
