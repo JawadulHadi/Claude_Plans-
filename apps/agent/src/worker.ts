@@ -6,6 +6,7 @@ import { runScoutAgent } from './agents/scout.agent.js';
 import { runScorerAgent } from './agents/scorer.agent.js';
 import { runTailorAgent } from './agents/tailor.agent.js';
 import { runInboxAgent } from './agents/inbox.agent.js';
+import { runApplierAgent } from './agents/applier.agent.js';
 
 const QUEUE_NAME = 'agent-jobs';
 
@@ -41,8 +42,7 @@ const worker = new Worker<AgentJob>(
         return runInboxAgent({ user_id: data.user_id });
 
       case 'apply':
-        console.log('[Worker] ApplierAgent not yet implemented — Phase 2');
-        return { skipped: true };
+        return runApplierAgent({ application_id: data.application_id });
 
       case 'schedule':
         console.log('[Worker] SchedulerAgent not yet implemented — Phase 3');
