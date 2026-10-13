@@ -26,6 +26,9 @@ importers:
       '@pitchfire/job-scraper':
         specifier: workspace:*
         version: link:../../packages/job-scraper
+      '@pitchfire/pipeline-tracker':
+        specifier: workspace:*
+        version: link:../../packages/pipeline-tracker
       '@pitchfire/resume-engine':
         specifier: workspace:*
         version: link:../../packages/resume-engine
@@ -44,6 +47,9 @@ importers:
       ioredis:
         specifier: ^5.4.2
         version: 5.11.1
+      playwright:
+        specifier: ^1.64.0
+        version: 1.64.0
     devDependencies:
       '@types/node':
         specifier: ^22.10.0

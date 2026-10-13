@@ -11,13 +11,15 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.54.0",
-    "@pitchfire/resume-engine": "workspace:*",
     "@pitchfire/job-scraper": "workspace:*",
+    "@pitchfire/pipeline-tracker": "workspace:*",
+    "@pitchfire/resume-engine": "workspace:*",
     "@pitchfire/shared": "workspace:*",
     "@supabase/supabase-js": "^2.46.2",
     "bullmq": "^5.36.0",
+    "dotenv": "^16.4.7",
     "ioredis": "^5.4.2",
-    "dotenv": "^16.4.7"
+    "playwright": "^1.64.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
