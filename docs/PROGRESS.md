@@ -33,7 +33,7 @@
 
 ## Phase 1 — Foundation (✅ Merged · PR #1)
 
-**Commit:** `a2b0685` · **Date:** 2026-10-12
+**Commit:** `a2b0685` · **Date:** 2025-10-12
 
 ### What Was Built
 
@@ -64,7 +64,7 @@ Upload a PDF resume → see ranked job feed with match scores (0–1 cosine simi
 
 ## Phase 2 — Apply Automation (✅ Merged · PR #3)
 
-**Commit:** `54ef593` · **Date:** 2026-10-12
+**Commit:** `54ef593` · **Date:** 2025-10-12
 
 ### What Was Built
 
@@ -89,7 +89,7 @@ One-click "Auto Apply" with resume tailoring and user approval gate. Full pipeli
 
 ## Phase 0 — Rename to PitchFire (✅ Merged · PR #4)
 
-**Commit:** `5f8416d` · **Date:** 2026-10-13
+**Commit:** `5f8416d` · **Date:** 2025-10-13
 
 ### What Changed
 - All `jobpilot-ai` / `@jobpilot/*` / `JobPilot` references replaced with `pitchfire` / `@pitchfire/*` / `PitchFire` (39 files)
@@ -166,7 +166,7 @@ Orchestrator (Sonnet 4.6)
 
 ## R&D Findings
 
-> Researched 2026-10-13. Top 5 priorities ranked by impact.
+> Researched 2025-10-13. Top 5 priorities ranked by impact.
 
 ### Top 5 Implementation Priorities
 
@@ -293,4 +293,4 @@ docs/PROGRESS.md updated — see Phase N section.
 
 ---
 
-*Last updated: 2026-10-13 · Phase 2 complete · R&D complete · Phase 3 next*
+*Last updated: 2025-10-13 · Phase 2 complete · R&D complete · Phase 3 next*
