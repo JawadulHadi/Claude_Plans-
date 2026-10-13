@@ -1,6 +1,6 @@
-import VoyageAI from 'voyageai';
+import { VoyageAIClient } from 'voyageai';
 
-const voyage = new VoyageAI({ apiKey: process.env.VOYAGE_API_KEY ?? '' });
+const voyage = new VoyageAIClient({ apiKey: process.env.VOYAGE_API_KEY ?? '' });
 
 export interface EmbeddingResult {
   embedding: number[];
@@ -31,7 +31,7 @@ export async function embedText(text: string): Promise<EmbeddingResult> {
     return {
       embedding: vec,
       model: 'voyage-3-lite',
-      inputTokens: result.usage?.total_tokens ?? 0,
+      inputTokens: result.usage?.totalTokens ?? 0,
     };
   } catch (err) {
     console.error('[Embedder] voyage-3-lite failed, using dev fallback:', (err as Error).message);
