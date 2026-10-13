@@ -1,6 +1,6 @@
-// @ts-nocheck — Supabase client without generated DB types
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
+import type { Database } from '@pitchfire/shared';
 import { scoreResumeAgainstJd } from '@pitchfire/resume-engine';
 
 const client = new Anthropic();
@@ -22,7 +22,7 @@ export interface ScorerOutput {
  * Model: claude-haiku-5-5 (from kedster pattern: cheap for filtering/routing)
  */
 export async function runScorerAgent(input: ScorerInput): Promise<ScorerOutput> {
-  const db = createClient(
+  const db = createClient<Database>(
     process.env.SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );

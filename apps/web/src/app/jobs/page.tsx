@@ -64,6 +64,7 @@ export default function JobsPage() {
                     href={job.url}
                     target="_blank"
                     rel="noopener noreferrer"
+                    aria-label={`View job details for ${job.title} at ${job.company}`}
                     className="text-xs text-blue-400 hover:text-blue-300"
                   >
                     View →

@@ -25,7 +25,7 @@ pnpm install
 docker-compose up -d
 
 # 4. Wait ~20s for Supabase to boot, then apply migrations
-npx supabase db push --local
+pnpm supabase db push --local
 
 # 5. Copy environment template
 cp .env.example .env.local
@@ -38,7 +38,7 @@ pnpm dev
 Services started by `pnpm dev`:
 - `http://localhost:3000` — Next.js web dashboard
 - `http://localhost:3001` — NestJS REST API  
-- `http://localhost:3001/api` — Swagger UI
+- `http://localhost:3001/docs` — Swagger UI
 - `http://localhost:6379` — Redis (Docker)
 - `http://localhost:54323` — Supabase Studio (Docker)
 - Agent worker — BullMQ consumer (background process)
@@ -120,7 +120,9 @@ pitchfire/
 │       │       ├── scorer.agent.ts
 │       │       ├── tailor.agent.ts
 │       │       ├── applier.agent.ts
-│       │       └── inbox.agent.ts
+│       │       ├── inbox.agent.ts
+│       │       ├── scheduler.agent.ts
+│       │       └── coach.agent.ts
 │       └── knowledge/
 │           └── skills/
 │               └── ats_playbooks/ # workday.md, greenhouse.md, lever.md
@@ -214,13 +216,13 @@ pnpm --filter @pitchfire/resume-engine build
 
 ```bash
 # Apply to local Supabase
-npx supabase db push --local
+pnpm supabase db push --local
 
-# Generate TypeScript types from schema
-npx supabase gen types typescript --local > packages/shared/src/db.types.ts
+# Generate TypeScript types from schema (updates packages/shared/src/database.types.ts)
+pnpm supabase gen types typescript --local > packages/shared/src/database.types.ts
 
 # Reset local DB (destructive)
-npx supabase db reset --local
+pnpm supabase db reset --local
 ```
 
 ---

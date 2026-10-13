@@ -1,6 +1,6 @@
-// @ts-nocheck — Supabase client without generated DB types; add types/supabase.ts to fix
 import Anthropic from '@anthropic-ai/sdk';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@pitchfire/shared';
 
 const client = new Anthropic();
 
@@ -50,7 +50,7 @@ const GMAIL_TOOLS: Anthropic.Tool[] = [
  * - interview_invite → enqueue schedule job; offer → log event; rejection/ghosted → update status
  */
 export async function runInboxAgent(input: InboxInput): Promise<InboxOutput> {
-  const db = createClient(
+  const db = createClient<Database>(
     process.env.SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
@@ -201,7 +201,7 @@ function findMatchingApp(
 }
 
 async function handleClassification(
-  db: ReturnType<typeof createClient>,
+  db: SupabaseClient<Database>,
   userId: string,
   classification: string,
   applicationId: string | undefined,
@@ -218,7 +218,8 @@ async function handleClassification(
   const newStatus = statusMap[classification];
   if (!newStatus) return;
 
-  await db.from('applications').update({ status: newStatus }).eq('id', applicationId);
+  type AppStatus = Database['public']['Tables']['applications']['Update']['status'];
+  await db.from('applications').update({ status: newStatus as AppStatus }).eq('id', applicationId);
 
   await db.from('pipeline_events').insert({
     application_id: applicationId,

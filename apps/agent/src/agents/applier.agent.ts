@@ -1,4 +1,3 @@
-// @ts-nocheck — Supabase client without generated DB types
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import Anthropic from '@anthropic-ai/sdk';
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
