@@ -1,3 +1,4 @@
+// @ts-nocheck — Supabase client without generated DB types; add types/supabase.ts to fix
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
 

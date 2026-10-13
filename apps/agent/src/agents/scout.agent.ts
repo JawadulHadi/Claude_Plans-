@@ -1,3 +1,4 @@
+// @ts-nocheck — Supabase client without generated DB types
 import { scrapeJobs } from '@pitchfire/job-scraper';
 import type { JobBoard } from '@pitchfire/shared';
 import { createClient } from '@supabase/supabase-js';

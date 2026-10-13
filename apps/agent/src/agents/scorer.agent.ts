@@ -1,3 +1,4 @@
+// @ts-nocheck — Supabase client without generated DB types
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
 import { scoreResumeAgainstJd } from '@pitchfire/resume-engine';

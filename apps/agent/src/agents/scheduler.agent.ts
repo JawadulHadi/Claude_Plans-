@@ -1,3 +1,4 @@
+// @ts-nocheck — Supabase client without generated DB types
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
 
@@ -67,7 +68,7 @@ export async function runSchedulerAgent(input: SchedulerInput): Promise<Schedule
     return { session_id: null, calendar_event_id: null, prep_notes_generated: false };
   }
 
-  const job = app.job_listings as { title: string; company: string; jd_text: string; url: string } | null;
+  const job = (app.job_listings as unknown) as { title: string; company: string; jd_text: string; url: string } | null;
 
   // Step 1: Extract interview details from email thread using Haiku
   const emailContent = await fetchEmailThread(input.email_thread_id);
@@ -300,8 +301,8 @@ async function execCalendarCreate(input: {
         description: input.description,
       }),
     });
-    const data = await res.json();
-    return data.id ?? null;
+    const data = await res.json() as Record<string, unknown>;
+    return (data.id as string | undefined) ?? null;
   } catch (err) {
     console.error('[SchedulerAgent] Calendar API error:', (err as Error).message);
     return null;
@@ -318,7 +319,7 @@ async function fetchEmailThread(threadId: string): Promise<string> {
       `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}?format=full`,
       { headers: { Authorization: `Bearer ${process.env.GMAIL_ACCESS_TOKEN}` } },
     );
-    const data = await res.json();
+    const data = await res.json() as { messages?: Array<{ payload?: { body?: { data?: string } } }> };
     const msg = data.messages?.[data.messages.length - 1];
     const body = msg?.payload?.body?.data ?? '';
     return Buffer.from(body, 'base64').toString('utf-8').slice(0, 3000);

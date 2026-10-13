@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { Worker, type Job } from 'bullmq';
-import IORedis from 'ioredis';
+import { Redis as IORedis } from 'ioredis';
 import type { AgentJob } from '@pitchfire/shared';
 import { runScoutAgent } from './agents/scout.agent.js';
 import { runScorerAgent } from './agents/scorer.agent.js';

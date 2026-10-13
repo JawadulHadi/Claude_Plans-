@@ -122,7 +122,8 @@ export class AnalyticsService {
 
     const companyMap = new Map<string, number>();
     for (const row of data ?? []) {
-      const company = (row.job_listings as { company: string } | null)?.company ?? 'Unknown';
+      const jl = row.job_listings as unknown as { company: string } | { company: string }[] | null;
+      const company = (Array.isArray(jl) ? jl[0]?.company : jl?.company) ?? 'Unknown';
       companyMap.set(company, (companyMap.get(company) ?? 0) + 1);
     }
 
