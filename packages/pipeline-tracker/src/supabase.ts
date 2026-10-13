@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { ApplicationStatus } from '@jobpilot/shared';
+import type { ApplicationStatus } from '@pitchfire/shared';
 
 function getClient() {
   const url = process.env.SUPABASE_URL;

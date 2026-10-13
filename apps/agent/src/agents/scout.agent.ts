@@ -1,7 +1,7 @@
-import { scrapeJobs } from '@jobpilot/job-scraper';
-import type { JobBoard } from '@jobpilot/shared';
+import { scrapeJobs } from '@pitchfire/job-scraper';
+import type { JobBoard } from '@pitchfire/shared';
 import { createClient } from '@supabase/supabase-js';
-import { embedText } from '@jobpilot/resume-engine';
+import { embedText } from '@pitchfire/resume-engine';
 
 const BACKEND_KEYWORDS = ['NestJS', 'Node.js', 'TypeScript', 'backend', 'API', 'PostgreSQL'];
 

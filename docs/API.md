@@ -1,6 +1,6 @@
-# REST API Reference — Applymatic
+# REST API Reference — PitchFire
 
-Base URL: `http://localhost:3001` (local) or `https://api.applymatic.com` (production)
+Base URL: `http://localhost:3001` (local) or `https://api.pitchfire.com` (production)
 
 Interactive docs: `{BASE_URL}/api` (Swagger UI)
 

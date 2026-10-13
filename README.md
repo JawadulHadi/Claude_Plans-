@@ -1,6 +1,6 @@
-# Applymatic — Autonomous AI Job Search Orchestrator
+# PitchFire — Autonomous AI Job Search Orchestrator
 
-> Upload your resume once. Applymatic discovers matched jobs, tailors every application, submits autonomously, tracks replies, and books your interviews — all while you focus on the work that matters.
+> Upload your resume once. PitchFire discovers matched jobs, tailors every application, submits autonomously, tracks replies, and books your interviews — all while you focus on the work that matters.
 
 [![Phase](https://img.shields.io/badge/Phase-2%20Complete-blue)](#roadmap)
 [![Stack](https://img.shields.io/badge/Stack-NestJS%20%7C%20Next.js%20%7C%20Supabase%20%7C%20Claude-blueviolet)](#tech-stack)
@@ -8,11 +8,11 @@
 
 ---
 
-## What Makes Applymatic Different
+## What Makes PitchFire Different
 
-Most job tools are search wrappers. Applymatic is a **multi-agent Claude orchestrator** where each agent owns a domain, communicates via a BullMQ job queue, and plugs into your existing stack (Gmail, Google Calendar, Notion, Slack) via MCP connectors — not third-party integrations bolted on later.
+Most job tools are search wrappers. PitchFire is a **multi-agent Claude orchestrator** where each agent owns a domain, communicates via a BullMQ job queue, and plugs into your existing stack (Gmail, Google Calendar, Notion, Slack) via MCP connectors — not third-party integrations bolted on later.
 
-| Feature | Others | Applymatic |
+| Feature | Others | PitchFire |
 |---|---|---|
 | Job discovery | Manual or alerts | 10+ boards, continuous |
 | Resume matching | Keyword filter | pgvector semantic similarity |
@@ -28,7 +28,7 @@ Most job tools are search wrappers. Applymatic is a **multi-agent Claude orchest
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Applymatic Platform                          │
+│                    PitchFire Platform                          │
 │                                                                 │
 │  apps/web (Next.js 14)   apps/api (NestJS)   apps/agent        │
 │  ├── /dashboard          ├── /resume         ├── ScoutAgent    │
@@ -61,8 +61,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full agent data-flow di
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/JawadulHadi/Applymatic.git
-cd Applymatic
+git clone https://github.com/JawadulHadi/PitchFire.git
+cd PitchFire
 pnpm install
 
 # 2. Configure environment

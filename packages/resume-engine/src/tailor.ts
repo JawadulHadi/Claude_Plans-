@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { ResumeVariant } from '@jobpilot/shared';
+import type { ResumeVariant } from '@pitchfire/shared';
 
 const client = new Anthropic();
 

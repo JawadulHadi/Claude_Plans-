@@ -1,7 +1,7 @@
-# Applymatic — Original Product Plan
+# PitchFire — Original Product Plan
 ## Complete Build, Test, Deploy & Monetize Strategy
 
-> This document is the original engineering plan that guided the Applymatic build. It captures the context, architectural decisions, reference patterns borrowed from existing open-source projects, and the phase-by-phase delivery roadmap. Preserved verbatim as a decision log.
+> This document is the original engineering plan that guided the PitchFire build. It captures the context, architectural decisions, reference patterns borrowed from existing open-source projects, and the phase-by-phase delivery roadmap. Preserved verbatim as a decision log.
 
 ---
 
@@ -21,7 +21,7 @@ The repo `jawadulhadi/claude_plans-` was a blank slate (just LICENSE + README). 
 
 ## Unique Angle: What Makes This Different
 
-Most job tools are search wrappers. **Applymatic** is a **multi-agent Claude orchestrator** where each agent owns a domain, communicates via a job pipeline queue, and plugs into the user's existing stack (Gmail, Calendar, Notion, Slack) via MCP connectors — not third-party integrations bolted on later.
+Most job tools are search wrappers. **PitchFire** is a **multi-agent Claude orchestrator** where each agent owns a domain, communicates via a job pipeline queue, and plugs into the user's existing stack (Gmail, Calendar, Notion, Slack) via MCP connectors — not third-party integrations bolted on later.
 
 The differentiators:
 1. **Resume Variant Engine** — one base resume → tailored variant per application (user's own career strategy, applied systematically for every applicant)
@@ -34,7 +34,7 @@ The differentiators:
 
 ### Monorepo Structure
 ```
-applymatic/
+pitchfire/
 ├── apps/
 │   ├── web/                   # Next.js 14 App Router — dashboard
 │   ├── api/                   # NestJS — REST + WebSocket
@@ -157,7 +157,7 @@ Files to create:
 - **Conveyor belt parallelism**: scout + score + inbox enqueued concurrently
 - **Self-updating ATS knowledge base**: `knowledge/skills/ats_playbooks/` (Workday/Ashby/Greenhouse/Lever recipes)
 - **Model fallback chain**: `sonnet → opus → haiku` on rate limit
-- **Persistent browser profiles**: `~/.jobpilot/browser_profiles/` — accumulates authenticated sessions
+- **Persistent browser profiles**: `~/.pitchfire/browser_profiles/` — accumulates authenticated sessions
 - **Integrity check pattern**: Haiku verifies no fabricated employers after tailoring
 
 ### From sreekarrs/JobSearch-Agent
@@ -182,7 +182,7 @@ Files to create:
 
 ```bash
 # 1. Clone + install
-git clone repo && cd applymatic
+git clone repo && cd pitchfire
 pnpm install
 
 # 2. Start local infra

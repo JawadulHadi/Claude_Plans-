@@ -1,5 +1,5 @@
 {
-  "name": "@jobpilot/api",
+  "name": "@pitchfire/api",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -11,9 +11,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.54.0",
-    "@jobpilot/resume-engine": "workspace:*",
-    "@jobpilot/job-scraper": "workspace:*",
-    "@jobpilot/shared": "workspace:*",
+    "@pitchfire/resume-engine": "workspace:*",
+    "@pitchfire/job-scraper": "workspace:*",
+    "@pitchfire/shared": "workspace:*",
     "@nestjs/common": "^10.4.7",
     "@nestjs/core": "^11.1.18",
     "@nestjs/platform-express": "^10.4.7",

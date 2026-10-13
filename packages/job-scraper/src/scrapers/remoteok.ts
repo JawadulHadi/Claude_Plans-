@@ -1,4 +1,4 @@
-import type { JobListing } from '@jobpilot/shared';
+import type { JobListing } from '@pitchfire/shared';
 
 // RemoteOK provides a public JSON API — no Playwright needed
 // https://remoteok.com/api
@@ -18,7 +18,7 @@ interface RemoteOkJob {
 
 export async function scrapeRemoteOk(keywords: string[]): Promise<Partial<JobListing>[]> {
   const response = await fetch('https://remoteok.com/api', {
-    headers: { 'User-Agent': 'JobPilot-Bot/1.0 (job search aggregator)' },
+    headers: { 'User-Agent': 'PitchFire-Bot/1.0 (job search aggregator)' },
   });
 
   if (!response.ok) {

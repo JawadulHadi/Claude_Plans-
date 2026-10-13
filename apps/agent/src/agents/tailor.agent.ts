@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
-import { tailorResumeForJob } from '@jobpilot/resume-engine';
-import type { ScoringResult } from '@jobpilot/resume-engine';
+import { tailorResumeForJob } from '@pitchfire/resume-engine';
+import type { ScoringResult } from '@pitchfire/resume-engine';
 
 export interface TailorInput {
   application_id: string;

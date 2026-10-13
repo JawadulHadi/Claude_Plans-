@@ -9,7 +9,7 @@ services:
       - '5432:5432'
     environment:
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: jobpilot
+      POSTGRES_DB: pitchfire
     volumes:
       - supabase-db-data:/var/lib/postgresql/data
       - ./supabase/migrations:/docker-entrypoint-initdb.d

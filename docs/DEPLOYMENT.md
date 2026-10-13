@@ -1,4 +1,4 @@
-# Deployment Guide — Applymatic
+# Deployment Guide — PitchFire
 
 ## Deployment Stages
 
@@ -127,7 +127,7 @@ REDIS_URL=redis://default:...@your-upstash-url:6379
 ### `apps/web` (Next.js — Vercel)
 
 ```bash
-NEXT_PUBLIC_API_URL=https://api.applymatic.com
+NEXT_PUBLIC_API_URL=https://api.pitchfire.com
 ```
 
 ### `apps/api` (NestJS — Railway)
@@ -176,7 +176,7 @@ Recommended `railway.json` per service:
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "pnpm --filter @applymatic/api start:prod",
+    "startCommand": "pnpm --filter @pitchfire/api start:prod",
     "restartPolicyType": "ON_FAILURE"
   }
 }

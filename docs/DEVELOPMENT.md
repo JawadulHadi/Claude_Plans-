@@ -1,4 +1,4 @@
-# Development Guide — Applymatic
+# Development Guide — PitchFire
 
 ## Prerequisites
 
@@ -15,8 +15,8 @@
 
 ```bash
 # 1. Clone
-git clone https://github.com/JawadulHadi/Applymatic.git
-cd Applymatic
+git clone https://github.com/JawadulHadi/PitchFire.git
+cd PitchFire
 
 # 2. Install all workspace packages
 pnpm install
@@ -83,7 +83,7 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 ## Monorepo Structure
 
 ```
-applymatic/
+pitchfire/
 ├── apps/
 │   ├── web/                       # Next.js 14 App Router
 │   │   ├── src/app/
@@ -174,9 +174,9 @@ pnpm test         # Run all tests (vitest)
 Run per-workspace:
 
 ```bash
-pnpm --filter @applymatic/web dev
-pnpm --filter @applymatic/api dev
-pnpm --filter @jobpilot/resume-engine build
+pnpm --filter @pitchfire/web dev
+pnpm --filter @pitchfire/api dev
+pnpm --filter @pitchfire/resume-engine build
 ```
 
 ---

@@ -1,5 +1,5 @@
 {
-  "name": "@jobpilot/pipeline-tracker",
+  "name": "@pitchfire/pipeline-tracker",
   "version": "0.1.0",
   "private": true,
   "main": "./dist/index.js",
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@jobpilot/shared": "workspace:*",
+    "@pitchfire/shared": "workspace:*",
     "@supabase/supabase-js": "^2.45.4"
   },
   "devDependencies": {

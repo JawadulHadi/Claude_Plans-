@@ -1,6 +1,6 @@
 import { Queue, Worker, type Job } from 'bullmq';
 import IORedis from 'ioredis';
-import type { AgentJob } from '@jobpilot/shared';
+import type { AgentJob } from '@pitchfire/shared';
 
 const QUEUE_NAME = 'agent-jobs';
 

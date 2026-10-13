@@ -1,8 +1,8 @@
-# Architecture — Applymatic
+# Architecture — PitchFire
 
 ## System Overview
 
-Applymatic is a TypeScript monorepo with three deployable apps and four shared packages, connected by a BullMQ job queue over Redis. All AI work runs through the Anthropic API using model-per-task routing.
+PitchFire is a TypeScript monorepo with three deployable apps and four shared packages, connected by a BullMQ job queue over Redis. All AI work runs through the Anthropic API using model-per-task routing.
 
 ```
 User Browser
@@ -70,7 +70,7 @@ apps/agent (BullMQ Worker, concurrency: 4)
   2. Detect ATS from job URL (workday / greenhouse / lever / ashby / generic)
   3. Load ATS playbook markdown from `knowledge/skills/ats_playbooks/`
   4. `recordTransition('approved' → 'applying')`
-  5. Launch stealth Chromium (persistent profile at `~/.jobpilot/browser_profiles/{userId}`)
+  5. Launch stealth Chromium (persistent profile at `~/.pitchfire/browser_profiles/{userId}`)
   6. Navigate to job URL, upload resume file
   7. Claude analyzes `document.body.innerHTML` + playbook → returns JSON actions array
   8. Execute: `fill`, `click`, `select`, `wait` actions
@@ -251,7 +251,7 @@ Claude Sonnet receives the playbook as context alongside the live page HTML, the
 
 ## Embedding Strategy
 
-Applymatic uses a two-step embedding approach (upgradeable to Voyage-3):
+PitchFire uses a two-step embedding approach (upgradeable to Voyage-3):
 
 1. **Claude Haiku** generates a semantic summary (key skills, experience, domain)
 2. **Deterministic 1536-dim vector** derived from the summary text (sin/cos encoding, L2-normalized)

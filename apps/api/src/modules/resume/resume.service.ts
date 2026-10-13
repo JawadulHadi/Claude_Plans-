@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { parsePdfResume, parseTextResume, embedText } from '@jobpilot/resume-engine';
+import { parsePdfResume, parseTextResume, embedText } from '@pitchfire/resume-engine';
 import { getSupabaseClient } from '../../common/supabase.js';
 import { enqueueAgentJob } from '../../common/queue.js';
 

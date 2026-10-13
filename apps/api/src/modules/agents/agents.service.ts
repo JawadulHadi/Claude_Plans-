@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { enqueueAgentJob } from '../../common/queue.js';
-import type { AgentJob } from '@jobpilot/shared';
+import type { AgentJob } from '@pitchfire/shared';
 
 @Injectable()
 export class AgentsService {

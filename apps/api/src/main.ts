@@ -15,7 +15,7 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
 
   const config = new DocumentBuilder()
-    .setTitle('JobPilot AI API')
+    .setTitle('PitchFire API')
     .setDescription('Autonomous job search orchestrator API')
     .setVersion('0.1.0')
     .addBearerAuth()
@@ -26,7 +26,7 @@ async function bootstrap() {
 
   const port = process.env.PORT || 3001;
   await app.listen(port);
-  console.log(`JobPilot API running on http://localhost:${port}`);
+  console.log(`PitchFire API running on http://localhost:${port}`);
   console.log(`Swagger docs: http://localhost:${port}/docs`);
 }
 
