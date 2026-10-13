@@ -10,7 +10,7 @@ import IORedis from 'ioredis';
 import { AppModule } from './app.module.js';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   app.enableCors({
     origin: process.env.WEB_URL || 'http://localhost:3000',
