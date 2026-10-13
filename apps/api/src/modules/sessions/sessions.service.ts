@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { createClient } from '@supabase/supabase-js';
 import type { InterviewSession } from '@pitchfire/shared';
+import { enqueueAgentJob } from '../../common/queue.js';
 
 @Injectable()
 export class SessionsService {
@@ -41,5 +42,12 @@ export class SessionsService {
 
     if (error) throw new NotFoundException(`Session ${id} not found`);
     return data as InterviewSession;
+  }
+
+  async generateCoachPrep(sessionId: string): Promise<{ queued: boolean; session_id: string }> {
+    // Verify session exists first
+    await this.getById(sessionId);
+    await enqueueAgentJob({ type: 'coach', session_id: sessionId });
+    return { queued: true, session_id: sessionId };
   }
 }

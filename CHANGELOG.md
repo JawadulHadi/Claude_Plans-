@@ -6,16 +6,24 @@ Versions correspond to completed phases.
 
 ---
 
-## [Unreleased] — Phase 4: Intelligence & Polish
+## [0.5.0] — 2025-10-13 — Phase 4: Intelligence & Polish
 
-### Planned
-- Analytics funnel dashboard: applied → reply → interview → offer
-- `CoachAgent` — interview Q&A generator per company + role (Sonnet)
-- Slack webhook notifications for key pipeline events
-- `@bull-board/express` admin UI at `/admin/queues` (ADMIN_TOKEN gated)
+### Added
+- **`CoachAgent`** — on-demand interview Q&A generator (`POST /sessions/:id/coach`). Enqueues `coach` job to `comms-queue`. Sonnet generates `{ company_context, mock_qa[], answer_guidance }` — up to 8 Q&As for onsite, 6 for technical, 5 for all other session types. Persists enhanced prep notes back to `sessions` table.
+- **Analytics API** — `GET /analytics/:userId`. Returns full funnel (`scouted → scored → tailored → applied → replied → interviews → offers`), 8-week activity timeline, top 10 companies, avg match score, reply rate, interview rate.
+- **Analytics dashboard** — `apps/web/src/app/analytics/page.tsx`. KPI cards + pipeline funnel bars + weekly grouped bar chart + top companies grid.
+- **Slack notifications module** — `NotificationsService` at `apps/api/src/modules/notifications/`. Sends Slack incoming webhook payloads for `application_submitted`, `reply_received`, `interview_scheduled`, `offer_received`, `dlq_alert`, `low_confidence_flag`. No-ops gracefully when `SLACK_WEBHOOK_URL` is not set.
+- **`@bull-board/express` admin UI** — mounted at `/admin/queues`. Guarded by `X-Admin-Token` header (set `ADMIN_TOKEN` env var). Shows queue depth, active jobs, failed jobs, and DLQ for all 3 queues.
+- **Score-gated critique loop** — `while (score < 0.8 && round < 3)` replaces fixed 2-round loop. `critiqueVariant` now returns `{ approved, score, feedback }`. Loop exits early when Haiku scores the variant ≥ 0.8.
+- **`coach` job type** — added to `AgentJobSchema` discriminated union, `JOB_TO_QUEUE` router, and `comms-queue` worker handler.
+- **Migration `003_phase4_analytics.sql`** — adds `applications.score` column + 3 performance indexes for funnel and timeline queries.
+- **`ADMIN_TOKEN` env var** — added to `.env.example` with Bull Board context comment.
+- **Analytics nav link** — added to `apps/web/src/app/layout.tsx` nav.
+
+### Planned for Phase 5
 - LinkedIn Jobs API (replace Playwright scraper)
 - Indeed Publisher API (replace Cloudflare-blocked scraper)
-- Score-gated critique loop: `while (score < 0.8 && round < 3)`
+- Stripe billing, multi-tenant agency mode, marketing landing page
 
 ---
 

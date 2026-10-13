@@ -126,5 +126,6 @@ export const AgentJobSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('apply'),    application_id: z.string().uuid() }),
   z.object({ type: z.literal('inbox'),    user_id: z.string().uuid() }),
   z.object({ type: z.literal('schedule'), application_id: z.string().uuid(), email_thread_id: z.string() }),
+  z.object({ type: z.literal('coach'),    session_id: z.string().uuid() }),
 ]);
 export type AgentJob = z.infer<typeof AgentJobSchema>;

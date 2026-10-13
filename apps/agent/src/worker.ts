@@ -8,6 +8,7 @@ import { runTailorAgent } from './agents/tailor.agent.js';
 import { runInboxAgent } from './agents/inbox.agent.js';
 import { runSchedulerAgent } from './agents/scheduler.agent.js';
 import { runApplierAgent } from './agents/applier.agent.js';
+import { runCoachAgent } from './agents/coach.agent.js';
 
 // Phase 3: 3 typed queues prevent slow scout jobs from blocking apply/comms
 // R&D finding: BullMQ v5 per-queue priority + separate concurrency settings
@@ -96,6 +97,7 @@ makeWorker(
     switch (data.type) {
       case 'inbox':    return runInboxAgent({ user_id: data.user_id });
       case 'schedule': return runSchedulerAgent({ application_id: data.application_id, email_thread_id: data.email_thread_id });
+      case 'coach':    return runCoachAgent({ session_id: data.session_id });
       default: return { skipped: true };
     }
   },
@@ -113,4 +115,4 @@ process.on('SIGTERM', () => {
 console.log('PitchFire Agent Workers started:');
 console.log(`  ${QUEUES.discovery} (concurrency 6): scout, score`);
 console.log(`  ${QUEUES.apply}     (concurrency 2): tailor, apply`);
-console.log(`  ${QUEUES.comms}     (concurrency 4): inbox, schedule`);
+console.log(`  ${QUEUES.comms}     (concurrency 4): inbox, schedule, coach`);

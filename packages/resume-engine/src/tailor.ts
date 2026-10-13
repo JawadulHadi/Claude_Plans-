@@ -30,10 +30,12 @@ export async function tailorResumeForJob(
   // Step 1: Generate initial variant
   let variantContent = await generateVariant(baseResume, jdText, missingSkills);
 
-  // Step 2: Critique loop (max 2 rounds — from sreekarrs LoopAgent pattern)
-  for (let round = 0; round < 2; round++) {
+  // Step 2: Score-gated critique loop — revise until score >= 0.8 or 3 rounds (Phase 4)
+  let score = 0;
+  for (let round = 0; round < 3 && score < 0.8; round++) {
     const critique = await critiqueVariant(variantContent, jdText, baseResume);
-    if (critique.approved) break;
+    score = critique.score;
+    if (critique.approved || score >= 0.8) break;
     variantContent = await reviseVariant(variantContent, critique.feedback);
   }
 
@@ -91,21 +93,22 @@ async function critiqueVariant(
   variant: string,
   jd: string,
   originalResume: string,
-): Promise<{ approved: boolean; feedback: string }> {
+): Promise<{ approved: boolean; score: number; feedback: string }> {
   const response = await client.messages.create({
     model: 'claude-haiku-5-5',
-    max_tokens: 256,
+    max_tokens: 300,
     messages: [
       {
         role: 'user',
-        content: `Review this tailored resume against the JD. Is it ready to submit?
+        content: `Review this tailored resume against the JD. Score it 0.0–1.0 for readiness.
 
 Check:
-1. Does it match the JD's key requirements?
-2. Are any claims obviously missing from the original resume (fabrication risk)?
-3. Is the format clean and ATS-friendly?
+1. Does it match the JD's key requirements? (weight: 0.4)
+2. Are any claims NOT in the original resume (fabrication risk)? (weight: 0.3)
+3. Is the format clean and ATS-friendly? (weight: 0.3)
 
-Respond as JSON: {"approved": true/false, "feedback": "specific issues or empty string if approved"}
+Respond as JSON: {"approved": true/false, "score": 0.0-1.0, "feedback": "specific issues or empty string if approved"}
+Approved = score >= 0.8 with no fabrication risk.
 
 JD (first 2000 chars): ${jd.slice(0, 2000)}
 VARIANT: ${variant.slice(0, 4000)}`,
@@ -115,9 +118,14 @@ VARIANT: ${variant.slice(0, 4000)}`,
 
   try {
     const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
-    return JSON.parse(text);
+    const parsed = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] ?? '{}');
+    return {
+      approved: parsed.approved ?? false,
+      score: typeof parsed.score === 'number' ? parsed.score : 0.5,
+      feedback: parsed.feedback ?? '',
+    };
   } catch {
-    return { approved: true, feedback: '' };
+    return { approved: true, score: 0.8, feedback: '' };
   }
 }
 
