@@ -64,7 +64,7 @@ Returns applications in `pending_review` status with tailored resume preview.
   {
     "id": "uuid",
     "status": "pending_review",
-    "created_at": "2026-10-12T...",
+    "created_at": "2025-10-12T...",
     "job_listings": {
       "title": "Backend Lead",
       "company": "Acme Corp",
