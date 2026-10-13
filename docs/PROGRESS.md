@@ -166,19 +166,98 @@ Orchestrator (Sonnet 4.6)
 
 ## R&D Findings
 
-> Populated from parallel research. Updated as findings arrive.
+> Researched 2026-10-13. Top 5 priorities ranked by impact.
 
-### Confirmed patterns in use
-- **Provider-agnostic model routing** — Haiku for cheap/fast (scoring, classification), Sonnet for quality (tailor, apply), Opus available for future upgrade
-- **Stealth Playwright** — random user-agent rotation, WebGL masking (adopted from sreekarrs/JobSearch-Agent)
-- **Self-evaluation loop** — faithfulness + relevancy score after each tailor; retry ≤3× before surfacing to user
-- **ATS knowledge base** — `knowledge/skills/ats_playbooks/` + `knowledge/skills/dropdowns/` structure (kedster pattern)
+### Top 5 Implementation Priorities
 
-### Pending R&D (see inline findings when agent completes)
-- BullMQ v5 job prioritization + dead letter queue patterns
-- Gmail MCP reply classification prompt engineering
-- Google Calendar MCP event creation + recurrence handling
-- LinkedIn scraping anti-bot mitigations (2025)
+| Priority | Change | Impact | Phase |
+|---|---|---|---|
+| 1 | Replace deterministic embedder with `voyage-3-lite` | Makes pgvector scores semantically valid | Phase 3 prep |
+| 2 | Implement InboxAgent Gmail MCP tool-use loop | Unlocks Phase 3 core feature | Phase 3 |
+| 3 | Split single queue into 3 typed queues | Prevents scout jobs blocking apply jobs | Phase 3 |
+| 4 | Fix `navigator.plugins` spoofing (integer array → Plugin objects) | Reduces bot detection on Wellfound/LinkedIn | Phase 3 |
+| 5 | Add Bull Board admin UI + DLQ on 3rd failure | Observability + recoverable failure handling | Phase 4 |
+
+---
+
+### Area 1 — Multi-Agent Orchestration
+
+**Finding:** BullMQ `switch` dispatcher should be wrapped in a thin Claude tool-use loop — the orchestrator model reads job metadata and calls the right tool, giving retry/self-correction for free. ScoutAgent currently runs board scrapes sequentially; `Promise.all` fan-out would cut scout time by ~N×.
+
+**Action for Phase 3:** Wrap dispatcher in Haiku tool-use loop. Fan-out ScoutAgent board scrapes.
+
+**Risk:** Tool-use loops add ~200–400 ms per Haiku hop. Keep orchestrator on Haiku; reserve Sonnet for generate/revise steps only.
+
+---
+
+### Area 2 — Job Board Scraping
+
+**Finding:** Current `navigator.plugins` override sets integer array `[1,2,3,4,5]` — a known bot signature. Real browsers return Plugin objects. LinkedIn uses TLS JA3 fingerprinting + CDP detection; raw Playwright sessions are fingerprinted since mid-2024. Indeed switched to Cloudflare Turnstile in late 2024 — scraping is now unreliable.
+
+**Actions:**
+1. Fix plugins override: `Object.defineProperty(navigator, 'plugins', { get: () => [{ name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', ... }] })`
+2. **LinkedIn** → use LinkedIn Jobs API (free, 500 req/day) instead of Playwright
+3. **Indeed** → use Indeed `publisher` API (`api.indeed.com/ads/apisearch`, free non-commercial) instead of scraping
+4. Add random `page.mouse.move()` jitter between Wellfound card reads
+5. Rotate browser profiles every 48 hours — stable profiles create stable fingerprints
+
+---
+
+### Area 3 — Resume Tailoring Quality
+
+**Critical finding:** The current embedder in `packages/resume-engine/src/embedder.ts` uses deterministic `sin/cos` encoding — not real dense vectors. pgvector similarity scores have no semantic meaning; the 0.72 threshold is arbitrary.
+
+**Fix:** Replace with `voyage-3-lite` (Voyage AI npm package) — true 1024-dim dense embeddings at $0.02/M tokens. Update schema + pgvector index from 1536 → 1024 dims.
+
+**Critique loop improvement:** Change from fixed 2-round `for` loop to score-gated `while (score < 0.8 && round < 3)`. Use Haiku to output `{ faithfulness: 0-1, answer_relevancy: 0-1, context_precision: 0-1 }` as JSON after each round; gate on all three > 0.75.
+
+**Reranking pattern:** After pgvector `<=>` retrieval, pass top-20 `(resume_chunk, jd_chunk)` pairs to Haiku for faithfulness + relevance scoring, return top-5. More accurate than cosine alone.
+
+---
+
+### Area 4 — NestJS + BullMQ
+
+**Finding:** Single `agent-jobs` queue means slow `scout` jobs block queue inspection for `tailor` jobs. BullMQ v5 supports per-job `priority` (1 = highest) and multiple queues.
+
+**Actions for Phase 3:**
+1. Split into 3 queues: `discovery-queue` (scout + score, concurrency 6), `apply-queue` (tailor + apply, concurrency 2), `comms-queue` (inbox + schedule, concurrency 4)
+2. Add `@bull-board/express` at `/admin/queues` behind `ADMIN_TOKEN` header check
+3. DLQ: on 3rd failure, push to `pitchfire:dlq` Redis key with full job payload
+4. Emit `pipeline_events` failure rows — agents currently don't write failure events
+5. Register `process.on('SIGTERM', () => worker.close())` to drain in-flight jobs on shutdown
+
+**Upstash note:** Use `enableOfflineQueue: false` and a single shared Redis connection per worker — Upstash serverless charges per command.
+
+---
+
+### Area 5 — Gmail + Google Calendar MCP (Phase 3)
+
+**InboxAgent implementation pattern:**
+```typescript
+// Tool-use loop: search → get thread → classify → update status
+tools: [gmail_search_threads, gmail_get_thread]
+query: 'from:careers OR from:recruiting label:INBOX after:YYYY/MM/DD'
+// Per thread: pass subject + first 500 chars to classifyJobEmail (Haiku)
+// Cost: ~$0.001 per classification
+```
+
+**Reply correlation:** fuzzy-match `sender_domain` against `job_listings.company` — `sender_domain.includes(company.toLowerCase().replace(/\s+/g, ''))` covers 80% of cases.
+
+**Calendar event creation:** Use Haiku structured output to extract `{ interview_date: ISO8601, duration_minutes: number, location: string | null }`. If extraction confidence < 0.8, flag for user confirmation instead of auto-booking.
+
+**Polling cadence:** Single 15-min BullMQ cron (`repeat: { every: 900_000 }`) that fans out one `inbox` job per user with `applied` applications — not per-user standing jobs.
+
+**Gmail rate limits:** 250 quota units/second per user. 20 applications = 200 units/poll — safely within limits. For agency mode: use BullMQ `limiter: { max: 40, duration: 1000 }`.
+
+**Classify `offer` and `followup`:** Both are in the type union but `InboxAgent` never acts on them. Wire them up: `offer` → notify user via Slack, `followup` → log pipeline event.
+
+---
+
+### Confirmed patterns already in use
+- **Provider-agnostic model routing** — Haiku for cheap/fast (scoring, classification), Sonnet for quality (tailor, apply)
+- **ATS knowledge base** — `knowledge/skills/ats_playbooks/` + `knowledge/skills/dropdowns/` structure
+- **User approval gate** — every application requires explicit user sign-off before Playwright submits
+- **Integrity check** — post-tailor verification that no fabricated employers/roles were introduced
 
 ---
 
@@ -214,4 +293,4 @@ docs/PROGRESS.md updated — see Phase N section.
 
 ---
 
-*Last updated: 2026-10-13 · Phase 2 complete · Phase 3 next*
+*Last updated: 2026-10-13 · Phase 2 complete · R&D complete · Phase 3 next*
