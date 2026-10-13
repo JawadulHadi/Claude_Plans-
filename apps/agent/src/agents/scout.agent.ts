@@ -1,6 +1,5 @@
-// @ts-nocheck — Supabase client without generated DB types
 import { scrapeJobs } from '@pitchfire/job-scraper';
-import type { JobBoard } from '@pitchfire/shared';
+import type { JobBoard, Database } from '@pitchfire/shared';
 import { createClient } from '@supabase/supabase-js';
 import { embedText } from '@pitchfire/resume-engine';
 
@@ -19,7 +18,7 @@ export interface ScoutOutput {
 }
 
 export async function runScoutAgent(input: ScoutInput): Promise<ScoutOutput> {
-  const db = createClient(
+  const db = createClient<Database>(
     process.env.SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
@@ -45,7 +44,7 @@ export async function runScoutAgent(input: ScoutInput): Promise<ScoutOutput> {
         : { embedding: null };
 
       const { error } = await db.from('job_listings').upsert(
-        { ...job, embedding },
+        { ...job, embedding: embedding as unknown as string | null } as Database['public']['Tables']['job_listings']['Insert'],
         { onConflict: 'url', ignoreDuplicates: true },
       );
 

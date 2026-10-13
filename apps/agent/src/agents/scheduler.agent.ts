@@ -1,6 +1,6 @@
-// @ts-nocheck — Supabase client without generated DB types
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
+import type { Database, Json } from '@pitchfire/shared';
 
 const client = new Anthropic();
 
@@ -51,7 +51,7 @@ const CALENDAR_TOOLS: Anthropic.Tool[] = [
  * - Sonnet generates personalised prep notes per company + role
  */
 export async function runSchedulerAgent(input: SchedulerInput): Promise<SchedulerOutput> {
-  const db = createClient(
+  const db = createClient<Database>(
     process.env.SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
@@ -79,7 +79,7 @@ export async function runSchedulerAgent(input: SchedulerInput): Promise<Schedule
     await db.from('pipeline_events').insert({
       application_id: input.application_id,
       event_type: 'interview_needs_confirmation',
-      payload: { details, email_thread_id: input.email_thread_id },
+      payload: { details, email_thread_id: input.email_thread_id } as unknown as Json,
     });
     return { session_id: null, calendar_event_id: null, prep_notes_generated: false };
   }
@@ -328,7 +328,9 @@ async function fetchEmailThread(threadId: string): Promise<string> {
   }
 }
 
-function inferSessionType(emailContent: string): string {
+function inferSessionType(
+  emailContent: string,
+): 'phone_screen' | 'technical' | 'behavioral' | 'onsite' | 'offer_call' | 'followup' {
   const lower = emailContent.toLowerCase();
   if (lower.includes('technical') || lower.includes('coding') || lower.includes('take-home')) return 'technical';
   if (lower.includes('phone') || lower.includes('screen')) return 'phone_screen';

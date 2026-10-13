@@ -1,6 +1,6 @@
-// @ts-nocheck — Supabase client without generated DB types
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
+import type { Database } from '@pitchfire/shared';
 
 const client = new Anthropic();
 
@@ -22,7 +22,7 @@ export interface CoachOutput {
  * Called on-demand from /sessions/:id/coach endpoint.
  */
 export async function runCoachAgent(input: CoachInput): Promise<CoachOutput> {
-  const db = createClient(
+  const db = createClient<Database>(
     process.env.SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
@@ -71,7 +71,7 @@ export async function runCoachAgent(input: CoachInput): Promise<CoachOutput> {
   await db.from('sessions').update({ prep_notes: enhancedNotes }).eq('id', input.session_id);
 
   await db.from('pipeline_events').insert({
-    application_id: app?.id,
+    application_id: app!.id,
     event_type: 'coach_prep_generated',
     payload: {
       session_id: input.session_id,

@@ -5,6 +5,16 @@ import type { Application } from '@pitchfire/shared';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
+interface ApplicationWithJob extends Application {
+  job_listings: {
+    title: string;
+    company: string;
+    board: string;
+    url: string;
+    location: string | null;
+  } | null;
+}
+
 const STATUS_STYLES: Record<string, string> = {
   pending_review: 'bg-yellow-950 text-yellow-400',
   approved: 'bg-blue-950 text-blue-400',
@@ -20,12 +30,12 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 export default function ApplicationsPage() {
-  const [applications, setApplications] = useState<Application[]>([]);
+  const [applications, setApplications] = useState<ApplicationWithJob[]>([]);
   const [loading, setLoading] = useState(true);
   const userId = 'demo-user-123'; // Phase 5: Supabase auth
 
   useEffect(() => {
-    fetch(`${API_URL}/pipeline/summary/${userId}`)
+    fetch(`${API_URL}/pipeline/${userId}`)
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data)) setApplications(data);
@@ -82,15 +92,19 @@ export default function ApplicationsPage() {
             >
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <div className="font-semibold text-white text-sm">{app.id}</div>
-                  <div className="text-gray-500 text-xs mt-0.5">
-                    Score: {app.match_score ? `${Math.round(app.match_score * 100)}%` : '—'}
+                  <div className="font-semibold text-white text-sm">
+                    {app.job_listings?.title ?? 'Job Application'}
+                  </div>
+                  <div className="text-gray-400 text-xs mt-0.5">
+                    {app.job_listings?.company ?? '—'}
+                    {app.job_listings?.location ? ` · ${app.job_listings.location}` : ''}
+                    {app.match_score ? ` · ${Math.round(app.match_score * 100)}% match` : ''}
                   </div>
                 </div>
                 <span
-                  className={`text-xs font-bold px-2 py-1 rounded-full ${STATUS_STYLES[app.status] ?? 'bg-gray-800 text-gray-400'}`}
+                  className={`text-xs font-bold px-2 py-1 rounded-full shrink-0 ${STATUS_STYLES[app.status] ?? 'bg-gray-800 text-gray-400'}`}
                 >
-                  {app.status.replace('_', ' ')}
+                  {app.status.replaceAll('_', ' ')}
                 </span>
               </div>
             </div>

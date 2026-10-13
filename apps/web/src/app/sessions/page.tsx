@@ -49,7 +49,7 @@ export default function SessionsPage() {
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center">
           <div className="text-gray-400 mb-2">No interview sessions yet.</div>
           <div className="text-gray-500 text-sm">
-            Sessions appear here once InboxAgent detects an interview invite in your Gmail.
+            Sessions appear here once we detect an interview invite in your email.
           </div>
         </div>
       ) : (

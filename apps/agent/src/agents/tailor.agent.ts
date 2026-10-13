@@ -1,5 +1,5 @@
-// @ts-nocheck — Supabase client without generated DB types
 import { createClient } from '@supabase/supabase-js';
+import type { Database, Json } from '@pitchfire/shared';
 import { tailorResumeForJob } from '@pitchfire/resume-engine';
 import type { ScoringResult } from '@pitchfire/resume-engine';
 
@@ -21,7 +21,7 @@ export interface TailorOutput {
  * Loop: critique → revise up to 2 rounds (from sreekarrs LoopAgent pattern)
  */
 export async function runTailorAgent(input: TailorInput): Promise<TailorOutput> {
-  const db = createClient(
+  const db = createClient<Database>(
     process.env.SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
@@ -67,15 +67,20 @@ export async function runTailorAgent(input: TailorInput): Promise<TailorOutput> 
   }
 
   // Store variant in resume record
-  const { data: resumeRecord } = await db
-    .from('resumes')
-    .select('variants')
-    .eq('id', app.resume_id)
-    .single();
+  if (app.resume_id) {
+    const { data: resumeRecord } = await db
+      .from('resumes')
+      .select('variants')
+      .eq('id', app.resume_id)
+      .single();
 
-  const variants = [...((resumeRecord?.variants as unknown[]) ?? []), output.variant];
+    const variants = [...((resumeRecord?.variants as unknown[]) ?? []), output.variant];
 
-  await db.from('resumes').update({ variants }).eq('id', app.resume_id);
+    await db
+      .from('resumes')
+      .update({ variants: variants as Json })
+      .eq('id', app.resume_id);
+  }
 
   // Update application with cover letter and variant
   await db
