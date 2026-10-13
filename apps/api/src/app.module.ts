@@ -5,6 +5,7 @@ import { JobsModule } from './modules/jobs/jobs.module.js';
 import { AgentsModule } from './modules/agents/agents.module.js';
 import { PipelineModule } from './modules/pipeline/pipeline.module.js';
 import { ApplyModule } from './modules/apply/apply.module.js';
+import { SessionsModule } from './modules/sessions/sessions.module.js';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { ApplyModule } from './modules/apply/apply.module.js';
     AgentsModule,
     PipelineModule,
     ApplyModule,
+    SessionsModule,
   ],
 })
 export class AppModule {}
