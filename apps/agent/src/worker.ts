@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { Worker, type Job } from 'bullmq';
 import IORedis from 'ioredis';
-import type { AgentJob } from '@jobpilot/shared';
+import type { AgentJob } from '@pitchfire/shared';
 import { runScoutAgent } from './agents/scout.agent.js';
 import { runScorerAgent } from './agents/scorer.agent.js';
 import { runTailorAgent } from './agents/tailor.agent.js';
@@ -15,7 +15,7 @@ const connection = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379'
 });
 
 /**
- * JobPilot Agent Worker
+ * PitchFire Agent Worker
  *
  * Implements the conveyor belt parallelism from kedster/jobautopilot-claude:
  * - Scout + Score + Inbox run concurrently
@@ -71,5 +71,5 @@ worker.on('error', (err) => {
   console.error('[Worker] Error:', err);
 });
 
-console.log('JobPilot Agent Worker started. Listening for jobs on queue:', QUEUE_NAME);
+console.log('PitchFire Agent Worker started. Listening for jobs on queue:', QUEUE_NAME);
 console.log('Concurrency: 4 (scout + score + tailor + inbox can run in parallel)');

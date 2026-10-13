@@ -5,7 +5,7 @@ export default function Home() {
     <div className="flex flex-col items-center justify-center min-h-[70vh] text-center gap-8">
       <div>
         <h1 className="text-5xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent mb-4">
-          JobPilot AI
+          PitchFire
         </h1>
         <p className="text-gray-400 text-xl max-w-xl">
           Autonomous job search orchestrator. Upload your resume, get matched jobs,

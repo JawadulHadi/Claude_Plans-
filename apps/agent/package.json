@@ -1,5 +1,5 @@
 {
-  "name": "@jobpilot/agent",
+  "name": "@pitchfire/agent",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,9 +11,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.54.0",
-    "@jobpilot/resume-engine": "workspace:*",
-    "@jobpilot/job-scraper": "workspace:*",
-    "@jobpilot/shared": "workspace:*",
+    "@pitchfire/resume-engine": "workspace:*",
+    "@pitchfire/job-scraper": "workspace:*",
+    "@pitchfire/shared": "workspace:*",
     "@supabase/supabase-js": "^2.46.2",
     "bullmq": "^5.36.0",
     "ioredis": "^5.4.2",

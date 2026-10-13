@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { getSupabaseClient } from '../../common/supabase.js';
-import type { ApplicationStatus } from '@jobpilot/shared';
+import type { ApplicationStatus } from '@pitchfire/shared';
 
 @Injectable()
 export class PipelineService {

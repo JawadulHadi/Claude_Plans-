@@ -1,4 +1,4 @@
-import type { JobListing } from '@jobpilot/shared';
+import type { JobListing } from '@pitchfire/shared';
 import { createStealthBrowser, createStealthContext, randomDelay } from '../browser.js';
 
 export async function scrapeWellfound(

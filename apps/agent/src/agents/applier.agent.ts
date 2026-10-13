@@ -2,9 +2,9 @@ import { chromium, type Browser, type BrowserContext, type Page } from 'playwrig
 import Anthropic from '@anthropic-ai/sdk';
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { getApplicationWithDetails, storeAppliedConfirmation, recordTransition } from '@jobpilot/pipeline-tracker';
+import { getApplicationWithDetails, storeAppliedConfirmation, recordTransition } from '@pitchfire/pipeline-tracker';
 
-const BROWSER_PROFILES_DIR = join(process.env.HOME || '/root', '.jobpilot', 'browser_profiles');
+const BROWSER_PROFILES_DIR = join(process.env.HOME || '/root', '.pitchfire', 'browser_profiles');
 const PLAYWRIGHT_EXECUTABLE =
   process.env.PLAYWRIGHT_BROWSERS_PATH
     ? join(process.env.PLAYWRIGHT_BROWSERS_PATH, 'chromium')

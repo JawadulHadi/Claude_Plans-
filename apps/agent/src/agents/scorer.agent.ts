@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
-import { scoreResumeAgainstJd } from '@jobpilot/resume-engine';
+import { scoreResumeAgainstJd } from '@pitchfire/resume-engine';
 
 const client = new Anthropic();
 

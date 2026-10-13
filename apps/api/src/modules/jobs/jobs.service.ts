@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { getSupabaseClient } from '../../common/supabase.js';
-import { embedText } from '@jobpilot/resume-engine';
-import type { JobListing } from '@jobpilot/shared';
+import { embedText } from '@pitchfire/resume-engine';
+import type { JobListing } from '@pitchfire/shared';
 
 @Injectable()
 export class JobsService {

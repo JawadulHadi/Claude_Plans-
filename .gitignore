@@ -14,7 +14,7 @@ test-results/
 playwright-report/
 
 # Browser profiles (contain auth tokens)
-.jobpilot/
+.pitchfire/
 
 # OS
 .DS_Store

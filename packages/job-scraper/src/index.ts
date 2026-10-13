@@ -1,4 +1,4 @@
-import type { JobListing, JobBoard } from '@jobpilot/shared';
+import type { JobListing, JobBoard } from '@pitchfire/shared';
 import { scrapeRemoteOk } from './scrapers/remoteok.js';
 import { scrapeWellfound } from './scrapers/wellfound.js';
 
