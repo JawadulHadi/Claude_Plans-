@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Param, Body } from '@nestjs/common';
+import { Controller, Get, Patch, Post, Param, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { SessionsService } from './sessions.service.js';
 import type { InterviewSession } from '@pitchfire/shared';
@@ -27,5 +27,11 @@ export class SessionsController {
     @Body() patch: Partial<InterviewSession>,
   ): Promise<InterviewSession> {
     return this.sessions.update(id, patch);
+  }
+
+  @Post(':id/coach')
+  @ApiOperation({ summary: 'Generate CoachAgent prep — Q&A, company context, answer guidance' })
+  generateCoachPrep(@Param('id') id: string) {
+    return this.sessions.generateCoachPrep(id);
   }
 }

@@ -2,11 +2,11 @@
 
 > Upload your resume once. PitchFire discovers matched jobs, tailors every application, submits autonomously, tracks replies, and books your interviews — all while you focus on the work that matters.
 
-[![Phase](https://img.shields.io/badge/Phase-3%20Complete-blue)](#roadmap)
+[![Phase](https://img.shields.io/badge/Phase-4%20Complete-blue)](#roadmap)
 [![Stack](https://img.shields.io/badge/Stack-NestJS%20%7C%20Next.js%20%7C%20Claude%20SDK%20%7C%20BullMQ-blueviolet)](#tech-stack)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![Security](https://img.shields.io/badge/Security-Policy-red)](SECURITY.md)
-[![Changelog](https://img.shields.io/badge/Changelog-v0.4.0-orange)](CHANGELOG.md)
+[![Changelog](https://img.shields.io/badge/Changelog-v0.5.0-orange)](CHANGELOG.md)
 
 ---
 
@@ -119,8 +119,8 @@ Open [http://localhost:3000](http://localhost:3000) — Swagger UI at [http://lo
 | **1** | Foundation — Scout + Score + Dashboard | ✅ Complete | [#1](https://github.com/JawadulHadi/pitchfire/pull/1) |
 | **2** | Apply Automation — Tailor + Playwright + Approval Gate | ✅ Complete | [#3](https://github.com/JawadulHadi/pitchfire/pull/3) |
 | **3** | Communication Layer — InboxAgent + SchedulerAgent + 3 Queues | ✅ Complete | [#6](https://github.com/JawadulHadi/pitchfire/pull/6) |
-| **4** | Intelligence & Polish — Analytics + CoachAgent + Bull Board | 🔜 Next | — |
-| **5** | SaaS Layer — Stripe + Multi-tenant + Agency Mode | 🔜 Planned | — |
+| **4** | Intelligence & Polish — Analytics + CoachAgent + Bull Board | ✅ Complete | — |
+| **5** | SaaS Layer — Stripe + Multi-tenant + Agency Mode | 🔜 Next | — |
 
 ---
 

@@ -19,6 +19,7 @@ const JOB_TO_QUEUE: Record<AgentJob['type'], QueueKey> = {
   apply:    'apply',
   inbox:    'comms',
   schedule: 'comms',
+  coach:    'comms',
 };
 
 const DEFAULT_JOB_OPTIONS = {
