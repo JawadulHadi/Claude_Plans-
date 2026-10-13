@@ -8,6 +8,8 @@ import { ApplyModule } from './modules/apply/apply.module.js';
 import { SessionsModule } from './modules/sessions/sessions.module.js';
 import { AnalyticsModule } from './modules/analytics/analytics.module.js';
 import { NotificationsModule } from './modules/notifications/notifications.module.js';
+import { BillingModule } from './modules/billing/billing.module.js';
+import { TenantsModule } from './modules/tenants/tenants.module.js';
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     SessionsModule,
     AnalyticsModule,
     NotificationsModule,
+    BillingModule,
+    TenantsModule,
   ],
 })
 export class AppModule {}

@@ -6,16 +6,31 @@ Versions correspond to completed phases.
 
 ---
 
-## [Unreleased] — Phase 4: Intelligence & Polish
+## [0.6.0] — 2026-10-13 — Phase 5: SaaS Layer
 
-### Planned
-- Analytics funnel dashboard: applied → reply → interview → offer
-- `CoachAgent` — interview Q&A generator per company + role (Sonnet)
-- Slack webhook notifications for key pipeline events
-- `@bull-board/express` admin UI at `/admin/queues` (ADMIN_TOKEN gated)
+### Added
+- **Stripe billing module** — `apps/api/src/modules/billing/`. `BillingService` handles Checkout sessions (pro/agency), Customer Portal, and webhook events (`checkout.session.completed`, `customer.subscription.updated/deleted`, `invoice.payment_failed`). Downgrades to free on payment failure. `enforceLimit()` guard used before any application submit.
+- **Plan enforcement** — `BillingService.enforceLimit(userId)` checks `users.applications_this_month` against `PLAN_LIMITS` (`free: 10/mo, pro: unlimited, agency: unlimited`). Returns 403 with upgrade prompt when limit reached.
+- **Agency tenants module** — `apps/api/src/modules/tenants/`. `TenantsService` manages `agency_members` table: `listMembers`, `addMember` (by email, slot limit 10), `updateMember`, `removeMember`. `getBulkApplyStatus` returns per-member funnel stats. All operations require `plan = 'agency'`.
+- **Marketing landing page** — `apps/web/src/app/(marketing)/page.tsx`. Hero + metrics (83% latency drop, 99.9% uptime, 10+ boards), 6-feature grid, 3-tier pricing cards, case study CTA. Standalone layout (no inner nav frame).
+- **Billing UI** — `apps/web/src/app/billing/page.tsx`. Current plan card with usage progress bar (colour-coded: blue → amber → red), upgrade cards, Stripe Customer Portal button.
+- **Agency dashboard** — `apps/web/src/app/agency/page.tsx`. Add member by email + label, active roster table with per-profile funnel stats (applied / replied / interviews), deactivate button.
+- **DB migration `004_phase5_saas.sql`** — `stripe_subscription_id`, `plan_period_start/end` columns on `users`; `agency_members` table (RLS: agency owner only); `usage_events` table; performance indexes for plan enforcement.
+- **`stripe` npm package** — `^17.7.0` added to `apps/api/package.json`.
+- **`STRIPE_PRICE_PRO`, `STRIPE_PRICE_AGENCY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`** env vars added to `.env.example`.
+- **Billing nav link** — added to `apps/web/src/app/layout.tsx`.
+
+### Fixed (post-phase hotfix, same release)
+- **Billing period reset** — `handleSubscriptionChange` now always resets `applications_this_month = 0` on any Stripe subscription update (was free-plan-only, leaving paid users' counters stale across billing periods). DB trigger `trg_reset_applications_on_period` in `005_billing_period_reset.sql` provides a second safety layer at the database level.
+
+### Planned post-Phase 5
 - LinkedIn Jobs API (replace Playwright scraper)
 - Indeed Publisher API (replace Cloudflare-blocked scraper)
-- Score-gated critique loop: `while (score < 0.8 && round < 3)`
+- White-label subdomain routing
+
+---
+
+## [0.5.0] — 2025-10-13 — Phase 4: Intelligence & Polish
 
 ---
 
