@@ -42,9 +42,18 @@ export async function createStealthContext(browser: Browser): Promise<BrowserCon
   });
 
   // Override navigator.webdriver to evade bot detection
+  // R&D fix: integer array [1,2,3,4,5] is a known bot signature — use Plugin objects instead
   await context.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-    Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+    const fakePlugin = (name: string, filename: string, desc: string) =>
+      ({ name, filename, description: desc, length: 0 } as unknown as Plugin);
+    Object.defineProperty(navigator, 'plugins', {
+      get: () => [
+        fakePlugin('Chrome PDF Plugin', 'internal-pdf-viewer', 'Portable Document Format'),
+        fakePlugin('Chrome PDF Viewer', 'mhjfbmdgcfjbbpaeojofohoefgiehjai', ''),
+        fakePlugin('Native Client', 'internal-nacl-plugin', ''),
+      ],
+    });
   });
 
   return context;
