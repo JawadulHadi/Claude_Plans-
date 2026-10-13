@@ -126,10 +126,10 @@ export class BillingService {
 
     await this.db.from('users').update({
       plan,
-      stripe_subscription_id: sub.id,
-      plan_period_start: new Date(sub.current_period_start * 1000).toISOString(),
-      plan_period_end:   new Date(sub.current_period_end   * 1000).toISOString(),
-      ...(plan === 'free' ? { applications_this_month: 0 } : {}),
+      stripe_subscription_id:  sub.id,
+      plan_period_start:       new Date(sub.current_period_start * 1000).toISOString(),
+      plan_period_end:         new Date(sub.current_period_end   * 1000).toISOString(),
+      applications_this_month: 0,
     }).eq('id', userId);
   }
 

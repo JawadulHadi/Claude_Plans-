@@ -20,11 +20,13 @@ Versions correspond to completed phases.
 - **`STRIPE_PRICE_PRO`, `STRIPE_PRICE_AGENCY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`** env vars added to `.env.example`.
 - **Billing nav link** — added to `apps/web/src/app/layout.tsx`.
 
+### Fixed (post-phase hotfix, same release)
+- **Billing period reset** — `handleSubscriptionChange` now always resets `applications_this_month = 0` on any Stripe subscription update (was free-plan-only, leaving paid users' counters stale across billing periods). DB trigger `trg_reset_applications_on_period` in `005_billing_period_reset.sql` provides a second safety layer at the database level.
+
 ### Planned post-Phase 5
 - LinkedIn Jobs API (replace Playwright scraper)
 - Indeed Publisher API (replace Cloudflare-blocked scraper)
 - White-label subdomain routing
-- `increment_applications_count` Supabase RPC (auto-reset on period start)
 
 ---
 
