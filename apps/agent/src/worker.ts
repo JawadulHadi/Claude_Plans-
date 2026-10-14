@@ -9,21 +9,22 @@ import { runInboxAgent } from './agents/inbox.agent.js';
 import { runSchedulerAgent } from './agents/scheduler.agent.js';
 import { runApplierAgent } from './agents/applier.agent.js';
 import { runCoachAgent } from './agents/coach.agent.js';
+import { closeAgentBus } from './lib/agent-bus.js';
+import { createLogger } from './lib/logger.js';
 
-// Phase 3: 3 typed queues prevent slow scout jobs from blocking apply/comms
-// R&D finding: BullMQ v5 per-queue priority + separate concurrency settings
+const log = createLogger('Worker');
+
 const QUEUES = {
-  discovery: 'discovery-queue',   // scout + score  (concurrency: 6)
-  apply:     'apply-queue',       // tailor + apply (concurrency: 2)
-  comms:     'comms-queue',       // inbox + schedule (concurrency: 4)
+  discovery: 'discovery-queue',
+  apply:     'apply-queue',
+  comms:     'comms-queue',
 } as const;
 
 const connection = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', {
   maxRetriesPerRequest: null,
-  enableOfflineQueue: false,  // Upstash serverless: fail fast, don't buffer
+  enableOfflineQueue: false,
 });
 
-// DLQ: on 3rd failure, raw payload → pitchfire:dlq Redis list
 async function pushToDLQ(job: Job<AgentJob>): Promise<void> {
   try {
     await connection.lpush(
@@ -31,9 +32,11 @@ async function pushToDLQ(job: Job<AgentJob>): Promise<void> {
       JSON.stringify({ job_id: job.id, data: job.data, failed_at: new Date().toISOString() }),
     );
   } catch (err) {
-    console.error('[Worker] DLQ push failed:', (err as Error).message);
+    log.error('DLQ push failed', { error: (err as Error).message });
   }
 }
+
+const workers: Worker<AgentJob>[] = [];
 
 function makeWorker(
   queueName: string,
@@ -43,22 +46,21 @@ function makeWorker(
   const w = new Worker<AgentJob>(queueName, handler, { connection, concurrency });
 
   w.on('completed', (job, result) => {
-    console.log(`[${queueName}] ✓ ${job.data.type}`, result);
+    log.info('Job completed', { queue: queueName, type: job.data.type, result });
   });
 
   w.on('failed', async (job, err) => {
-    console.error(`[${queueName}] ✗ ${job?.data.type}:`, err.message);
+    log.error('Job failed', { queue: queueName, type: job?.data.type, error: err.message });
     if (job && job.attemptsMade >= 3) {
       await pushToDLQ(job);
     }
   });
 
-  w.on('error', (err) => console.error(`[${queueName}] Error:`, err));
+  w.on('error', (err) => log.error('Worker error', { queue: queueName, error: err.message }));
 
+  workers.push(w);
   return w;
 }
-
-// ─── Discovery worker (scout + score) ────────────────────────────────────────
 
 makeWorker(
   QUEUES.discovery,
@@ -73,8 +75,6 @@ makeWorker(
   6,
 );
 
-// ─── Apply worker (tailor + apply) ───────────────────────────────────────────
-
 makeWorker(
   QUEUES.apply,
   async (job: Job<AgentJob>) => {
@@ -87,8 +87,6 @@ makeWorker(
   },
   2,
 );
-
-// ─── Comms worker (inbox + schedule) ─────────────────────────────────────────
 
 makeWorker(
   QUEUES.comms,
@@ -104,15 +102,19 @@ makeWorker(
   4,
 );
 
-// ─── Graceful shutdown ────────────────────────────────────────────────────────
-
-process.on('SIGTERM', () => {
-  console.log('[Worker] SIGTERM received — closing workers');
-  // Workers close gracefully; connection cleaned up by bullmq internals
+process.on('SIGTERM', async () => {
+  log.info('SIGTERM received — draining workers');
+  await Promise.all(workers.map((w) => w.close()));
+  await closeAgentBus();
+  connection.disconnect();
+  log.info('Workers shut down cleanly');
   process.exit(0);
 });
 
-console.log('PitchFire Agent Workers started:');
-console.log(`  ${QUEUES.discovery} (concurrency 6): scout, score`);
-console.log(`  ${QUEUES.apply}     (concurrency 2): tailor, apply`);
-console.log(`  ${QUEUES.comms}     (concurrency 4): inbox, schedule, coach`);
+log.info('PitchFire Agent Workers started', {
+  queues: [
+    `${QUEUES.discovery} (c=6): scout, score`,
+    `${QUEUES.apply} (c=2): tailor, apply`,
+    `${QUEUES.comms} (c=4): inbox, schedule, coach`,
+  ],
+});

@@ -2,6 +2,10 @@ import { scrapeJobs } from '@pitchfire/job-scraper';
 import type { JobBoard, Database } from '@pitchfire/shared';
 import { createClient } from '@supabase/supabase-js';
 import { embedText } from '@pitchfire/resume-engine';
+import { createLogger } from '../lib/logger.js';
+import { publishScore } from '../lib/agent-bus.js';
+
+const log = createLogger('ScoutAgent');
 
 const BACKEND_KEYWORDS = ['NestJS', 'Node.js', 'TypeScript', 'backend', 'API', 'PostgreSQL'];
 
@@ -14,6 +18,7 @@ export interface ScoutInput {
 export interface ScoutOutput {
   discovered: number;
   stored: number;
+  score_triggered: boolean;
   errors: Array<{ board: string; error: string }>;
 }
 
@@ -25,7 +30,6 @@ export async function runScoutAgent(input: ScoutInput): Promise<ScoutOutput> {
 
   const keywords = input.keywords ?? BACKEND_KEYWORDS;
 
-  // Scout runs on haiku (cheap/fast for discovery — from kedster model routing)
   const { jobs, errors } = await scrapeJobs({
     keywords,
     boards: input.boards,
@@ -38,7 +42,6 @@ export async function runScoutAgent(input: ScoutInput): Promise<ScoutOutput> {
     if (!job.url || !job.title) continue;
 
     try {
-      // Embed the JD for semantic search
       const { embedding } = job.jd_text
         ? await embedText(job.jd_text)
         : { embedding: null };
@@ -48,12 +51,37 @@ export async function runScoutAgent(input: ScoutInput): Promise<ScoutOutput> {
         { onConflict: 'url', ignoreDuplicates: true },
       );
 
-      if (!error) stored++;
-    } catch {
-      // Non-fatal: skip malformed listings
+      if (error) {
+        log.warn('Failed to store job listing', { url: job.url, error: error.message });
+      } else {
+        stored++;
+      }
+    } catch (err) {
+      log.warn('Embedding or upsert failed', { url: job.url, error: (err as Error).message });
     }
   }
 
-  console.log(`[ScoutAgent] Discovered: ${jobs.length}, Stored: ${stored}, Errors: ${errors.length}`);
-  return { discovered: jobs.length, stored, errors };
+  log.info('Scout complete', { discovered: jobs.length, stored, board_errors: errors.length });
+
+  // Trigger scoring pipeline for newly stored jobs
+  let scoreTriggered = false;
+  if (stored > 0) {
+    const { data: resume } = await db
+      .from('resumes')
+      .select('id')
+      .eq('user_id', input.user_id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (resume) {
+      await publishScore(input.user_id, resume.id);
+      scoreTriggered = true;
+      log.info('Published score job', { user_id: input.user_id, resume_id: resume.id });
+    } else {
+      log.warn('No active resume found — score job not published', { user_id: input.user_id });
+    }
+  }
+
+  return { discovered: jobs.length, stored, score_triggered: scoreTriggered, errors };
 }

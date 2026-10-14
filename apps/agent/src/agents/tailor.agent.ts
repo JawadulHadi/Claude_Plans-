@@ -1,7 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database, Json } from '@pitchfire/shared';
 import { tailorResumeForJob } from '@pitchfire/resume-engine';
-import type { ScoringResult } from '@pitchfire/resume-engine';
+import { createLogger } from '../lib/logger.js';
+
+const log = createLogger('TailorAgent');
 
 export interface TailorInput {
   application_id: string;
@@ -14,11 +16,11 @@ export interface TailorOutput {
 }
 
 /**
- * TailorAgent: Uses Claude Sonnet (quality-critical) to generate a tailored
- * resume variant + cover letter for a specific application.
+ * TailorAgent generates a tailored resume variant + cover letter.
  *
- * Model: claude-sonnet-4-6 (from kedster: opus/sonnet for quality-critical tasks)
- * Loop: critique → revise up to 2 rounds (from sreekarrs LoopAgent pattern)
+ * INTENTIONALLY does NOT publish to ApplierAgent.
+ * The /review UI is the approval gate — the API's POST /apply/:id
+ * calls publishApply() only after the user explicitly approves.
  */
 export async function runTailorAgent(input: TailorInput): Promise<TailorOutput> {
   const db = createClient<Database>(
@@ -26,7 +28,6 @@ export async function runTailorAgent(input: TailorInput): Promise<TailorOutput> 
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
 
-  // Fetch application with job and resume
   const { data: app } = await db
     .from('applications')
     .select(`
@@ -42,21 +43,25 @@ export async function runTailorAgent(input: TailorInput): Promise<TailorOutput> 
   const job = app.job_listings as { title: string; company: string; jd_text: string };
   const resume = app.resumes as { content_text: string };
 
-  // Generate tailored output (includes critique loop + integrity check)
   const output = await tailorResumeForJob(
     resume.content_text,
     job.jd_text,
     job.title,
     job.company,
-    [],   // missing skills populated from scorer data in Phase 2
+    [],
   );
 
   if (!output.integrityCheck.passed) {
-    console.warn('[TailorAgent] Integrity issues:', output.integrityCheck.issues);
-    // Update status to blocked for manual review
+    log.warn('Integrity check failed — blocking for review', {
+      application_id: input.application_id,
+      issues: output.integrityCheck.issues,
+    });
     await db
       .from('applications')
-      .update({ status: 'pending_review', notes: `Integrity issues: ${output.integrityCheck.issues.join('; ')}` })
+      .update({
+        status: 'pending_review',
+        notes: `Integrity issues: ${output.integrityCheck.issues.join('; ')}`,
+      })
       .eq('id', input.application_id);
 
     return {
@@ -66,7 +71,6 @@ export async function runTailorAgent(input: TailorInput): Promise<TailorOutput> 
     };
   }
 
-  // Store variant in resume record
   if (app.resume_id) {
     const { data: resumeRecord } = await db
       .from('resumes')
@@ -75,14 +79,9 @@ export async function runTailorAgent(input: TailorInput): Promise<TailorOutput> 
       .single();
 
     const variants = [...((resumeRecord?.variants as unknown[]) ?? []), output.variant];
-
-    await db
-      .from('resumes')
-      .update({ variants: variants as Json })
-      .eq('id', app.resume_id);
+    await db.from('resumes').update({ variants: variants as Json }).eq('id', app.resume_id);
   }
 
-  // Update application with cover letter and variant
   await db
     .from('applications')
     .update({
@@ -92,7 +91,13 @@ export async function runTailorAgent(input: TailorInput): Promise<TailorOutput> 
     })
     .eq('id', input.application_id);
 
-  console.log(`[TailorAgent] Tailored for ${job.title} @ ${job.company}`);
+  log.info('Tailored — awaiting user approval', {
+    application_id: input.application_id,
+    job_title: job.title,
+    company: job.company,
+    variant_label: output.variant.label,
+  });
+
   return {
     variant_label: output.variant.label,
     cover_letter_length: output.coverLetter.length,

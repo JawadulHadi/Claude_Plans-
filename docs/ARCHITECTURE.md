@@ -26,66 +26,130 @@ apps/api (NestJS, port 3001)
      │
      │  BullMQ enqueue (Redis)
      ▼
-apps/agent (BullMQ Worker, concurrency: 4)
+apps/agent (BullMQ Worker, 3 queues)
   ├── ScoutAgent      — scrapes 10+ job boards (Playwright stealth)
-  ├── ScorerAgent     — pgvector match + Claude Haiku 5.5 re-rank
+  ├── ScorerAgent     — pgvector match + voyage-3-lite 1024-dim cosine
   ├── TailorAgent     — Claude Sonnet 4.6 + critique/revise loop → variant
   ├── ApplierAgent    — ATS detection → playbook → Playwright form-fill
-  ├── InboxAgent      — Gmail MCP polling → classify reply
-  └── SchedulerAgent  — Google Calendar MCP → interview event + prep
+  ├── InboxAgent      — Gmail tool-use loop → classify reply
+  ├── SchedulerAgent  — Calendar event + Sonnet prep notes
+  └── CoachAgent      — role Q&A + company context (final node)
 ```
+
+---
+
+## Agent Communication Flow
+
+Agents communicate exclusively via BullMQ queues through `apps/agent/src/lib/agent-bus.ts`.
+No direct function calls between agents; all handoffs are async queue messages.
+
+```
+User uploads resume
+        │
+        ▼ POST /agents/scout
+  ScoutAgent  ──publishScore()──▶  ScorerAgent
+        │                               │
+  discovery-queue (c=6)        discovery-queue (c=6)
+                                        │
+                                  score ≥ 0.72?
+                                        │ yes
+                                  publishTailor()──▶  TailorAgent
+                                                            │
+                                                      apply-queue (c=2)
+                                                            │
+                                                    status: 'approved'
+                                                    (awaits user review)
+                                                            │
+                                                 User approves in /review
+                                                            │
+                                              POST /apply/:id → publishApply()
+                                                            │
+                                                      ApplierAgent
+                                                            │
+                                                      apply-queue (c=2)
+                                                            │
+                                                  form filled + submitted
+                                                            │
+                                              publishInbox() [5-min delay]
+                                                            │
+                                                       InboxAgent
+                                                            │
+                                                    comms-queue (c=4)
+                                                            │
+                                              interview_invite detected?
+                                                            │ yes
+                                              publishSchedule(appId, threadId)
+                                                            │
+                                                   SchedulerAgent
+                                                            │
+                                                    comms-queue (c=4)
+                                                            │
+                                              calendar event + prep notes
+                                                            │
+                                                   publishCoach(sessionId)
+                                                            │
+                                                      CoachAgent
+                                                    (final node — no publish)
+```
+
+**Approval gate**: TailorAgent deliberately does NOT publish to ApplierAgent.
+The `/review` UI is the human-in-the-loop checkpoint. Only `POST /apply/:id` from
+the API layer triggers `publishApply()` — after explicit user approval.
 
 ---
 
 ## Agent Descriptions
 
 ### ScoutAgent
-- **Model**: Claude Haiku 5.5 (cheap, fast filtering)
-- **Input**: `{ user_id, boards: string[] }`
-- **Flow**: Playwright scrapes each board concurrently → upserts `job_listings` → enqueues `score` job
-- **Boards**: RemoteOK (JSON API), Wellfound (Playwright), LinkedIn (future), Indeed (future)
+- **Model**: Claude Haiku 5.5 (via `resume-engine` scrapeJobs)
+- **Input**: `{ user_id, boards: string[], keywords? }`
+- **Flow**: Playwright scrapes each board concurrently → embeds JD text (voyage-3-lite) → upserts `job_listings` → `publishScore(userId, resumeId)`
+- **Boards**: RemoteOK (JSON API), Wellfound (Playwright)
+- **On empty resume**: warns, no score job published
 
 ### ScorerAgent
-- **Model**: Claude Haiku 5.5 + pgvector cosine similarity
+- **Model**: `callWithRetry` wraps `scoreResumeAgainstJd` (Haiku + pgvector)
 - **Input**: `{ user_id, resume_id }`
-- **Flow**: Loads user resume embedding → calls `match_jobs_for_resume()` Supabase RPC (ivfflat cosine, top 10) → Claude re-ranks with faithfulness self-eval (3 retries) → updates `applications.score` → enqueues `tailor` for score > 0.72
-- **Threshold**: 0.72 similarity to proceed to tailoring
+- **Flow**: Load resume → filter unseen jobs (bug fix: skip `.not()` filter when list empty) → score each → insert application row → `publishTailor(app.id)` for score ≥ 0.72
+- **Threshold**: `MATCH_THRESHOLD = 0.72`
 
 ### TailorAgent
-- **Model**: Claude Sonnet 4.6 (tailoring) + Claude Haiku 5.5 (critique + integrity check)
+- **Model**: Claude Sonnet 4.6 (tailoring) + Haiku (critique + integrity check)
 - **Input**: `{ application_id }`
-- **Flow**:
-  1. Load resume + JD from Supabase
-  2. Sonnet generates tailored resume variant + cover letter
-  3. Haiku critique loop (≤2 rounds): checks relevance, tone, keyword density
-  4. Haiku integrity check: verifies no fabricated employers or skills
-  5. If integrity fails → mark `bounced`
-  6. Otherwise → store variant in `applications.tailor_output` → set status `pending_review`
+- **Flow**: Load resume + JD → Sonnet generates variant + cover letter → Haiku critique loop (≤2 rounds) → integrity check → store variant → set `status: 'approved'`
+- **Gate**: Does NOT publish downstream — waits for user approval in `/review`
 
 ### ApplierAgent
-- **Model**: Claude Sonnet 4.6 (DOM analysis + action generation)
+- **Model**: Claude Sonnet 4.6 (`MODELS.QUALITY`) via `callWithRetry`
 - **Input**: `{ application_id }`
-- **Flow**:
-  1. Load application details from `pipeline-tracker`
-  2. Detect ATS from job URL (workday / greenhouse / lever / ashby / generic)
-  3. Load ATS playbook markdown from `knowledge/skills/ats_playbooks/`
-  4. `recordTransition('approved' → 'applying')`
-  5. Launch stealth Chromium (persistent profile at `~/.pitchfire/browser_profiles/{userId}`)
-  6. Navigate to job URL, upload resume file
-  7. Claude analyzes `document.body.innerHTML` + playbook → returns JSON actions array
-  8. Execute: `fill`, `click`, `select`, `wait` actions
-  9. `storeAppliedConfirmation(url, text)` → status `applied`
-  10. On any error → `recordTransition('applying' → 'bounced')`
+- **Flow**: Fetch user email from `users` table (not hardcoded) → detect ATS → load playbook → stealth Chromium → Claude DOM analysis → JSON actions array → execute → `publishInbox(userId)`
+- **Security**: Email fetched from DB per user — no hardcoded PII
 
-### InboxAgent (Phase 3)
-- **Model**: Claude Haiku 5.5
+### InboxAgent
+- **Model**: Claude Haiku 5.5 (`MODELS.FAST`) with `logTokens`
 - **Input**: `{ user_id }`
-- **Flow**: Gmail MCP search for job-related threads → classify each as `interview` / `reject` / `ghosted` / `offer` → update application status → enqueue `schedule` if interview
+- **Flow**: Gmail tool-use loop (5 rounds max) → classify threads → update `applications.status` → on `interview_invite`: `publishSchedule(applicationId, threadId)`
 
-### SchedulerAgent (Phase 3)
-- **Model**: Claude Sonnet 4.6
+### SchedulerAgent
+- **Model**: Haiku for extraction (`MODELS.FAST`), Sonnet for prep notes (`MODELS.QUALITY`)
 - **Input**: `{ application_id, email_thread_id }`
-- **Flow**: Extract interview time from thread → Google Calendar MCP create event → Claude generates prep notes (company research + role-specific Q&A) → store in `sessions` table
+- **Flow**: Extract interview details → confidence gate (< 0.8 → flag user) → Sonnet prep notes → Google Calendar event → insert `sessions` row → `publishCoach(session.id)`
+
+### CoachAgent
+- **Model**: Claude Sonnet 4.6 (`MODELS.QUALITY`) via `callWithRetry`
+- **Input**: `{ session_id }`
+- **Flow**: Load session + job + resume → company context bullets → role-specific Q&A (5–8 questions by session type) → persist enhanced prep notes to `sessions` table
+- **Final node**: No downstream publish
+
+---
+
+## Shared Libraries (apps/agent/src/lib/)
+
+| File | Purpose |
+|---|---|
+| `logger.ts` | Zero-dep structured JSON logger. `createLogger(agent)` → `{ info, warn, error, debug }`. stderr for warn/error, stdout for info/debug. |
+| `models.ts` | `MODELS.FAST / MODELS.QUALITY` constants. `callWithRetry<T>()` with backoff on 429/500/529. `logTokens()` per-call cost visibility. |
+| `agent-bus.ts` | BullMQ Queue producers. Lazy singleton IORedis connection. `closeAgentBus()` for graceful SIGTERM. |
 
 ---
 
@@ -93,18 +157,22 @@ apps/agent (BullMQ Worker, concurrency: 4)
 
 ```typescript
 type AgentJob =
-  | { type: 'scout';   user_id: string; boards: string[] }
-  | { type: 'score';   user_id: string; resume_id: string }
-  | { type: 'tailor';  application_id: string }
-  | { type: 'apply';   application_id: string }
-  | { type: 'inbox';   user_id: string }
-  | { type: 'schedule'; application_id: string };
+  | { type: 'scout';    user_id: string; boards: string[] }
+  | { type: 'score';    user_id: string; resume_id: string }
+  | { type: 'tailor';   application_id: string }
+  | { type: 'apply';    application_id: string }
+  | { type: 'inbox';    user_id: string }
+  | { type: 'schedule'; application_id: string; email_thread_id: string }
+  | { type: 'coach';    session_id: string }
 ```
 
 Worker configuration:
-- **Concurrency**: 4 (scout + score + inbox can run concurrently)
-- **Retry**: 3 attempts with exponential backoff
-- **Queue name**: `agent-jobs`
+- **`discovery-queue`** — concurrency 6: `scout`, `score`
+- **`apply-queue`** — concurrency 2: `tailor`, `apply`
+- **`comms-queue`** — concurrency 4: `inbox`, `schedule`, `coach`
+- **DLQ**: `pitchfire:dlq` Redis list — raw payload after 3rd attempt
+- **Retry**: 3 attempts, exponential backoff (2s → 4s → 8s) per job
+- **SIGTERM**: drains all workers + calls `closeAgentBus()` + disconnects Redis
 
 ---
 
@@ -113,71 +181,64 @@ Worker configuration:
 ### Core Tables
 
 ```sql
--- Users
 users (
   id uuid PRIMARY KEY,
   email text UNIQUE,
-  plan text DEFAULT 'free',         -- free | pro | agency
+  plan text DEFAULT 'free',
   stripe_customer_id text,
   created_at timestamptz
 )
 
--- Resumes with pgvector embedding
 resumes (
   id uuid PRIMARY KEY,
   user_id uuid REFERENCES users(id),
   content_text text,
-  embedding vector(1536),           -- Anthropic embedding (semantic summary)
-  variants jsonb,                   -- array of { tailored_resume, cover_letter, score }
+  embedding vector(1024),           -- voyage-3-lite 1024-dim
+  variants jsonb,
   created_at timestamptz
 )
 
--- Job listings with pgvector embedding
 job_listings (
   id uuid PRIMARY KEY,
   title text,
   company text,
-  board text,                       -- remoteok | wellfound | linkedin | ...
+  board text,
   url text UNIQUE,
   jd_text text,
-  embedding vector(1536),
+  embedding vector(1024),           -- voyage-3-lite 1024-dim
   location text,
   scraped_at timestamptz
 )
 
--- Applications (the pipeline)
 applications (
   id uuid PRIMARY KEY,
   user_id uuid REFERENCES users(id),
   job_id uuid REFERENCES job_listings(id),
   resume_id uuid REFERENCES resumes(id),
-  status text DEFAULT 'discovered', -- see status machine below
-  score float,                      -- similarity 0-1
-  tailor_output jsonb,              -- { tailored_resume, cover_letter, score }
+  status text DEFAULT 'discovered',
+  match_score float,
+  tailor_output jsonb,
   applied_at timestamptz,
-  last_event_at timestamptz,
   created_at timestamptz
 )
 
--- Event log for every status transition
 pipeline_events (
   id uuid PRIMARY KEY,
   application_id uuid REFERENCES applications(id),
   event_type text,
-  from_status text,
-  to_status text,
-  source text,                      -- agent | user | system
   payload jsonb,
   created_at timestamptz
 )
 
--- Interview sessions
 sessions (
   id uuid PRIMARY KEY,
   user_id uuid REFERENCES users(id),
   application_id uuid REFERENCES applications(id),
-  type text,                        -- interview | followup | offer
+  type text,
   scheduled_at timestamptz,
+  duration_minutes int,
+  google_calendar_event_id text,
+  interviewer_names text[],
   prep_notes text,
   created_at timestamptz
 )
@@ -188,13 +249,10 @@ sessions (
 ```
 discovered
     │
-    ▼ ScorerAgent (score > 0.72)
-scored
-    │
-    ▼ TailorAgent (variant generated)
+    ▼ ScorerAgent (score ≥ 0.72)
 pending_review
     │          │
-    ▼ user     ▼ user
+    ▼ user     ▼ TailorAgent
   approved   withdrawn
     │
     ▼ ApplierAgent
@@ -204,13 +262,16 @@ pending_review
   applied    bounced
     │
     ▼ InboxAgent
-  replied / ghosted / interview_scheduled
+  replied | rejected | offer | interview
+    │
+    ▼ SchedulerAgent (interview only)
+  interview (session created)
 ```
 
 ### pgvector Index
 
 ```sql
-CREATE INDEX ON resumes  USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+CREATE INDEX ON resumes      USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 CREATE INDEX ON job_listings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 ```
 
@@ -218,7 +279,7 @@ CREATE INDEX ON job_listings USING ivfflat (embedding vector_cosine_ops) WITH (l
 
 ```sql
 CREATE OR REPLACE FUNCTION match_jobs_for_resume(
-  query_embedding vector(1536),
+  query_embedding vector(1024),
   similarity_threshold float DEFAULT 0.72,
   match_count int DEFAULT 10
 ) RETURNS TABLE (id uuid, title text, company text, similarity float)
@@ -245,20 +306,17 @@ Stored in `apps/agent/knowledge/skills/ats_playbooks/`:
 | `ashby.md` | (upcoming) |
 | `generic.md` | (upcoming) |
 
-Claude Sonnet receives the playbook as context alongside the live page HTML, then returns a JSON actions array. This handles per-company form variations gracefully without hard-coded selectors.
-
 ---
 
 ## Embedding Strategy
 
-PitchFire uses a two-step embedding approach (upgradeable to Voyage-3):
+PitchFire uses **voyage-3-lite** (1024-dim) for semantic embeddings:
+- Resume text → 1024-dim dense vector stored in `resumes.embedding`
+- JD text → 1024-dim dense vector stored in `job_listings.embedding`
+- Cosine similarity via pgvector IVFFlat index → match score 0–1
+- Threshold 0.72 → proceed to tailoring
 
-1. **Claude Haiku** generates a semantic summary (key skills, experience, domain)
-2. **Deterministic 1536-dim vector** derived from the summary text (sin/cos encoding, L2-normalized)
-
-This avoids the need for a separate embedding API while producing semantically meaningful vectors for pgvector similarity search.
-
-**Production upgrade path**: Replace step 2 with `voyage-3` or `text-embedding-3-small` for true dense embeddings.
+**Cost**: $0.02/1M tokens. Semantically superior to deterministic encoding.
 
 ---
 
@@ -269,12 +327,13 @@ This avoids the need for a separate embedding API while producing semantically m
 - `navigator.plugins` spoofed to `[1, 2, 3]`
 - Custom user agent: Chrome/120 on macOS
 - Locale: `en-US`, Timezone: `America/New_York`
-- Persistent session storage per user (cookies, localStorage)
+- Persistent session storage per user
 
 ### Row-Level Security
-All Supabase tables have RLS enabled. Users can only read/write their own rows via `auth.uid() = user_id` policies.
+All Supabase tables have RLS enabled. Users read/write their own rows via `auth.uid() = user_id` policies.
 
 ### Data Isolation
 - Each user gets an isolated browser profile directory
 - `pipeline_tracker` validates application ownership before transitions
+- User email fetched from DB per-request — no PII in source code
 - No cross-tenant data exposure by design

@@ -1,7 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@pitchfire/shared';
+import { createLogger } from '../lib/logger.js';
+import { MODELS, logTokens } from '../lib/models.js';
+import { publishSchedule } from '../lib/agent-bus.js';
 
+const log = createLogger('InboxAgent');
 const client = new Anthropic();
 
 export interface InboxInput {
@@ -13,7 +17,6 @@ export interface InboxOutput {
   classified: Array<{ subject: string; classification: string; application_id?: string }>;
 }
 
-// Gmail tool schemas — Claude drives the search/read loop, we execute the calls
 const GMAIL_TOOLS: Anthropic.Tool[] = [
   {
     name: 'gmail_search_threads',
@@ -40,15 +43,6 @@ const GMAIL_TOOLS: Anthropic.Tool[] = [
   },
 ];
 
-/**
- * InboxAgent: Gmail MCP tool-use loop.
- *
- * Pattern from R&D findings (Area 5):
- * - Claude drives search → get thread → classify in a tool-use loop
- * - Haiku classifier: ~$0.001 per email, structured output
- * - Fuzzy-matches sender domain against job_listings.company
- * - interview_invite → enqueue schedule job; offer → log event; rejection/ghosted → update status
- */
 export async function runInboxAgent(input: InboxInput): Promise<InboxOutput> {
   const db = createClient<Database>(
     process.env.SUPABASE_URL!,
@@ -62,6 +56,7 @@ export async function runInboxAgent(input: InboxInput): Promise<InboxOutput> {
     .eq('status', 'applied');
 
   if (!apps?.length) {
+    log.info('No applied applications to check', { user_id: input.user_id });
     return { emails_checked: 0, classified: [] };
   }
 
@@ -70,7 +65,6 @@ export async function runInboxAgent(input: InboxInput): Promise<InboxOutput> {
     .filter(Boolean)
     .join(' OR ');
 
-  // Build since-date: 30 days back
   const sinceDate = new Date();
   sinceDate.setDate(sinceDate.getDate() - 30);
   const sinceStr = sinceDate.toISOString().slice(0, 10).replace(/-/g, '/');
@@ -89,20 +83,19 @@ Return JSON: { "results": [{ "thread_id": string, "subject": string, "classifica
   const classified: InboxOutput['classified'] = [];
   let emailsChecked = 0;
 
-  // Tool-use loop: max 5 rounds to prevent runaway
   for (let round = 0; round < 5; round++) {
     const response = await client.messages.create({
-      model: 'claude-haiku-5-5',
+      model: MODELS.FAST,
       max_tokens: 1024,
       system: systemPrompt,
       tools: GMAIL_TOOLS,
       messages,
     });
 
+    logTokens('InboxAgent', MODELS.FAST, response.usage, `round_${round}`);
     messages.push({ role: 'assistant', content: response.content });
 
     if (response.stop_reason === 'end_turn') {
-      // Parse final JSON result from Claude
       const text = response.content.find((b) => b.type === 'text')?.text ?? '';
       try {
         const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -119,18 +112,17 @@ Return JSON: { "results": [{ "thread_id": string, "subject": string, "classifica
               classification: r.classification,
               application_id: app?.id,
             });
-            await handleClassification(db, input.user_id, r.classification, app?.id, r.subject);
+            await handleClassification(db, input.user_id, r.classification, app?.id, r.subject, r.thread_id);
           }
         }
       } catch {
-        console.warn('[InboxAgent] Could not parse Claude JSON response');
+        log.warn('Could not parse Claude JSON response');
       }
       break;
     }
 
     if (response.stop_reason !== 'tool_use') break;
 
-    // Execute tool calls
     const toolResults: Anthropic.ToolResultBlockParam[] = [];
     for (const block of response.content) {
       if (block.type !== 'tool_use') continue;
@@ -149,14 +141,13 @@ Return JSON: { "results": [{ "thread_id": string, "subject": string, "classifica
     messages.push({ role: 'user', content: toolResults });
   }
 
+  log.info('Inbox scan complete', { emails_checked: emailsChecked, classified: classified.length });
   return { emails_checked: emailsChecked, classified };
 }
 
-// ─── Tool execution stubs (replaced with real Gmail API / MCP calls in prod) ──
-
 async function execGmailSearch(input: { query: string; max_results?: number }): Promise<string> {
   if (!process.env.GMAIL_ACCESS_TOKEN) {
-    console.log('[InboxAgent] Gmail not configured — stub search for query:', input.query);
+    log.debug('Gmail not configured — stub search', { query: input.query });
     return JSON.stringify({ threads: [], message: 'Gmail OAuth not configured' });
   }
 
@@ -187,8 +178,6 @@ async function execGmailGetThread(input: { thread_id: string }): Promise<string>
   return JSON.stringify({ subject, snippet: data.snippet?.slice(0, 500) ?? '' });
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function findMatchingApp(
   apps: Array<{ id: string; job_listings: unknown }>,
   company: string,
@@ -206,6 +195,7 @@ async function handleClassification(
   classification: string,
   applicationId: string | undefined,
   subject: string,
+  threadId: string,
 ): Promise<void> {
   if (!applicationId) return;
 
@@ -224,17 +214,22 @@ async function handleClassification(
   await db.from('pipeline_events').insert({
     application_id: applicationId,
     event_type: classification,
-    payload: { subject, classified_by: 'inbox_agent', model: 'claude-haiku-5-5' },
+    payload: { subject, thread_id: threadId, classified_by: 'inbox_agent', model: MODELS.FAST },
   });
+
+  // Trigger scheduling for interview invites
+  if (classification === 'interview_invite') {
+    await publishSchedule(applicationId, threadId);
+    log.info('Interview invite — schedule job published', { application_id: applicationId, thread_id: threadId });
+  }
 }
 
-/** Classify a single email subject + snippet (used for unit tests). */
 export async function classifyJobEmail(
   subject: string,
   snippet: string,
 ): Promise<'interview_invite' | 'rejection' | 'offer' | 'followup' | 'other'> {
   const response = await client.messages.create({
-    model: 'claude-haiku-5-5',
+    model: MODELS.FAST,
     max_tokens: 32,
     messages: [
       {
