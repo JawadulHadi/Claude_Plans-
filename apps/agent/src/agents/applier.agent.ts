@@ -3,14 +3,20 @@ import Anthropic from '@anthropic-ai/sdk';
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { getApplicationWithDetails, storeAppliedConfirmation, recordTransition } from '@pitchfire/pipeline-tracker';
+import { createClient } from '@supabase/supabase-js';
+import type { Database } from '@pitchfire/shared';
+import { createLogger } from '../lib/logger.js';
+import { MODELS, callWithRetry } from '../lib/models.js';
+import { publishInbox } from '../lib/agent-bus.js';
+
+const log = createLogger('ApplierAgent');
+const client = new Anthropic();
 
 const BROWSER_PROFILES_DIR = join(process.env.HOME || '/root', '.pitchfire', 'browser_profiles');
 const PLAYWRIGHT_EXECUTABLE =
   process.env.PLAYWRIGHT_BROWSERS_PATH
     ? join(process.env.PLAYWRIGHT_BROWSERS_PATH, 'chromium')
     : '/opt/pw-browsers/chromium';
-
-const client = new Anthropic();
 
 export interface ApplierInput {
   application_id: string;
@@ -75,7 +81,6 @@ async function createBrowser(userId: string): Promise<{ browser: Browser; contex
       : undefined,
   });
 
-  // Override automation detection
   await context.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
     Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
@@ -146,17 +151,19 @@ ${pageHtml.slice(0, 4000)}
 
 Respond with a JSON array of actions to fill this form. Be specific with selectors.`;
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 2000,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: userMessage }],
-  });
+  const response = await callWithRetry(
+    () => client.messages.create({
+      model: MODELS.QUALITY,
+      max_tokens: 2000,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userMessage }],
+    }),
+    { agentName: 'ApplierAgent' },
+  );
 
   const content = response.content[0];
   if (content.type !== 'text') return { success: false, actions: [] };
 
-  // Extract JSON from response
   const jsonMatch = content.text.match(/\[[\s\S]*\]/);
   if (!jsonMatch) return { success: false, actions: [] };
 
@@ -185,8 +192,7 @@ Respond with a JSON array of actions to fill this form. Be specific with selecto
         await page.waitForTimeout(2000);
         executedActions.push(`Waited: ${action.description}`);
       }
-    } catch (err) {
-      // Field may not exist on this specific form — continue
+    } catch {
       executedActions.push(`Skipped (not found): ${action.description}`);
     }
   }
@@ -195,7 +201,6 @@ Respond with a JSON array of actions to fill this form. Be specific with selecto
 }
 
 async function uploadResumeFile(page: Page, resumeText: string): Promise<boolean> {
-  // Write resume to temp file for upload
   const tempPath = join('/tmp', `resume-${Date.now()}.txt`);
   writeFileSync(tempPath, resumeText);
 
@@ -203,7 +208,7 @@ async function uploadResumeFile(page: Page, resumeText: string): Promise<boolean
     const fileInput = page.locator('input[type="file"]').first();
     if (await fileInput.count() > 0) {
       await fileInput.setInputFiles(tempPath);
-      await page.waitForTimeout(3000); // wait for upload
+      await page.waitForTimeout(3000);
       return true;
     }
   } catch {
@@ -215,7 +220,6 @@ async function uploadResumeFile(page: Page, resumeText: string): Promise<boolean
 export async function runApplierAgent(input: ApplierInput): Promise<ApplierResult> {
   const { application_id } = input;
 
-  // Fetch full application details
   const appData = await getApplicationWithDetails(application_id);
   if (!appData) {
     return { success: false, error: 'Application not found' };
@@ -230,7 +234,6 @@ export async function runApplierAgent(input: ApplierInput): Promise<ApplierResul
     return { success: false, error: 'No job URL found' };
   }
 
-  // Get the tailored variant (first one, or base resume)
   const variant = resume?.variants?.[0];
   const resumeText = variant?.tailored_resume ?? resume?.content_text ?? '';
   const coverLetter = variant?.cover_letter ?? '';
@@ -238,20 +241,34 @@ export async function runApplierAgent(input: ApplierInput): Promise<ApplierResul
   const atsType = detectAts(job.url);
   const atsPlaybook = loadAtsPlaybook(atsType);
 
-  // Mark as applying
   await recordTransition(application_id, 'approved', 'applying', { ats_type: atsType });
 
-  // Get user profile from env or defaults (Phase 5: pull from Supabase users table)
+  const userId = appData.user_id as string;
+
+  // Fetch user email from DB — never hardcode PII in a multi-tenant SaaS
+  const db = createClient<Database>(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+  const { data: userData } = await db
+    .from('users')
+    .select('email')
+    .eq('id', userId)
+    .single();
+
   const userProfile = {
-    firstName: process.env.USER_FIRST_NAME ?? 'Jawad',
-    lastName: process.env.USER_LAST_NAME ?? 'Ul Hadi',
-    email: process.env.USER_EMAIL ?? 'jawadulhadicc@gmail.com',
-    phone: process.env.USER_PHONE ?? '',
-    location: process.env.USER_LOCATION ?? 'Remote',
-    linkedin: process.env.USER_LINKEDIN,
+    firstName: process.env.USER_FIRST_NAME ?? '',
+    lastName:  process.env.USER_LAST_NAME  ?? '',
+    email:     userData?.email ?? process.env.USER_EMAIL ?? '',
+    phone:     process.env.USER_PHONE    ?? '',
+    location:  process.env.USER_LOCATION ?? 'Remote',
+    linkedin:  process.env.USER_LINKEDIN,
   };
 
-  const userId = appData.user_id as string;
+  if (!userProfile.email) {
+    log.error('No user email found — cannot fill form', { user_id: userId });
+    return { success: false, error: 'User email not found' };
+  }
 
   let browser: Browser | undefined;
   let context: BrowserContext | undefined;
@@ -260,23 +277,12 @@ export async function runApplierAgent(input: ApplierInput): Promise<ApplierResul
     ({ browser, context } = await createBrowser(userId));
     const page = await context.newPage();
 
-    // Navigate to job application
     await page.goto(job.url, { waitUntil: 'networkidle', timeout: 30000 });
-
-    // Upload resume file if possible
     await uploadResumeFile(page, resumeText);
 
-    // Fill form with Claude's guidance
     const { success, actions } = await fillFormWithClaude(
       page,
-      {
-        jobTitle: job.title,
-        company: job.company,
-        jobDescription: job.jd_text,
-        resumeVariant: resumeText,
-        coverLetter,
-        userProfile,
-      },
+      { jobTitle: job.title, company: job.company, jobDescription: job.jd_text, resumeVariant: resumeText, coverLetter, userProfile },
       atsType,
       atsPlaybook,
     );
@@ -286,18 +292,19 @@ export async function runApplierAgent(input: ApplierInput): Promise<ApplierResul
       return { success: false, error: 'Failed to fill form', ats_type: atsType };
     }
 
-    console.log(`[applier] Executed ${actions.length} form actions for ${job.company}`);
+    log.info('Form filled', { actions_count: actions.length, company: job.company, ats_type: atsType });
 
-    // Capture confirmation
     const confirmationUrl = page.url();
     const confirmationText = await page.evaluate(() => document.body.innerText.slice(0, 500));
 
-    // Save browser profile for future runs
     await saveProfile(context, userId);
     await browser.close();
 
-    // Record successful application
     await storeAppliedConfirmation(application_id, confirmationUrl, confirmationText);
+
+    // Trigger inbox monitoring after a 5-minute delay (allow email to arrive)
+    await publishInbox(userId);
+    log.info('Application submitted — inbox job queued', { application_id, company: job.company });
 
     return {
       success: true,
@@ -309,6 +316,7 @@ export async function runApplierAgent(input: ApplierInput): Promise<ApplierResul
     try { await browser?.close(); } catch { /* ignore */ }
 
     const errorMessage = err instanceof Error ? err.message : String(err);
+    log.error('Application failed', { application_id, error: errorMessage, ats_type: atsType });
     await recordTransition(application_id, 'applying', 'bounced', { error: errorMessage });
 
     return { success: false, error: errorMessage, ats_type: atsType };

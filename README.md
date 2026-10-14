@@ -3,10 +3,11 @@
 > Upload your resume once. PitchFire discovers matched jobs, tailors every application, submits autonomously, tracks replies, and books your interviews — all while you focus on the work that matters.
 
 [![Phase](https://img.shields.io/badge/Phase-5%20Complete-blue)](#roadmap)
+[![Agents](https://img.shields.io/badge/Agents-7-blueviolet)](#the-7-agents)
 [![Stack](https://img.shields.io/badge/Stack-NestJS%20%7C%20Next.js%20%7C%20Claude%20SDK%20%7C%20BullMQ-blueviolet)](#tech-stack)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![Security](https://img.shields.io/badge/Security-Policy-red)](SECURITY.md)
-[![Changelog](https://img.shields.io/badge/Changelog-v0.6.0-orange)](CHANGELOG.md)
+[![Changelog](https://img.shields.io/badge/Changelog-v0.7.0-orange)](CHANGELOG.md)
 
 ---
 
@@ -22,40 +23,60 @@ Most job tools are search wrappers. PitchFire is a **multi-agent Claude orchestr
 | Application | Manual | Autonomous Playwright ATS form-fill + user approval gate |
 | Reply tracking | Check your inbox | Gmail tool-use loop, Haiku classifier, auto-update pipeline |
 | Interview booking | Manual | Google Calendar REST API, confidence gate, Sonnet prep notes |
+| Interview prep | Manual research | CoachAgent: role Q&A + company context via Claude Sonnet |
 | Failure handling | Silent | DLQ on 3rd failure, confidence gates, integrity checks |
 
 **Designing for AI Failure** is the core thesis: every autonomous action has a fallback (confidence < 0.8 → user flag), an approval gate (every application reviewed before submit), and a recovery path (DLQ replay). See [docs/RND.md](docs/RND.md) for the full reasoning.
 
 ---
 
+## The 7 Agents
+
+Each agent owns exactly one domain. They communicate exclusively through typed BullMQ queue messages — no direct function calls between agents.
+
+| Agent | Model | Trigger | Output | Downstream |
+|---|---|---|---|---|
+| **ScoutAgent** | Haiku 5.5 (scraper) | API / cron | Job listings stored in Supabase | → ScorerAgent |
+| **ScorerAgent** | Haiku 5.5 + pgvector | ScoutAgent | Application rows with match score | → TailorAgent (score ≥ 0.72) |
+| **TailorAgent** | Sonnet 4.6 | ScorerAgent | Tailored resume variant + cover letter | — (approval gate) |
+| **ApplierAgent** | Sonnet 4.6 | User approves in /review | ATS form filled + submitted | → InboxAgent (5-min delay) |
+| **InboxAgent** | Haiku 5.5 | ApplierAgent | Email threads classified | → SchedulerAgent (interview_invite) |
+| **SchedulerAgent** | Haiku + Sonnet 4.6 | InboxAgent | Calendar event + prep notes | → CoachAgent |
+| **CoachAgent** | Sonnet 4.6 | SchedulerAgent | Role Q&A + company context | — (final node) |
+
+> **Approval gate**: TailorAgent deliberately stops the chain. The `/review` UI is the human-in-the-loop checkpoint before any application is submitted.
+
+---
+
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         PitchFire Platform                         │
-│                                                                     │
-│   apps/web (Next.js 14)    apps/api (NestJS)    apps/agent          │
-│   ├── /dashboard           ├── /resume          ├── ScoutAgent      │
-│   ├── /jobs                ├── /jobs            ├── ScorerAgent     │
-│   ├── /review ◄────────────├── /apply ──────────├── TailorAgent    │
-│   ├── /applications        ├── /pipeline        ├── ApplierAgent   │
-│   └── /sessions            ├── /sessions        ├── InboxAgent     │
-│                            └── /agents          └── SchedulerAgent  │
-│                                                                     │
-│   packages/                                                         │
-│   ├── resume-engine    (parse · voyage-3-lite embed · tailor)       │
-│   ├── job-scraper      (Playwright stealth · RemoteOK · Wellfound)  │
-│   ├── pipeline-tracker (Supabase transitions · Notion sync stub)    │
-│   └── shared           (Zod schemas · AgentJob discriminated union) │
-│                                                                     │
-│   Queues (BullMQ + Redis):                                          │
-│   ├── discovery-queue (c=6)  → scout, score                        │
-│   ├── apply-queue (c=2)      → tailor, apply                       │
-│   ├── comms-queue (c=4)      → inbox, schedule                     │
-│   └── pitchfire:dlq          → failed jobs after 3 attempts        │
-│                                                                     │
-│   Data: Supabase (PostgreSQL + pgvector 1024-dim) + Redis           │
-└─────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                          PitchFire Platform                          │
+│                                                                      │
+│   apps/web (Next.js 14)     apps/api (NestJS)     apps/agent         │
+│   ├── /dashboard            ├── /resume           ├── ScoutAgent     │
+│   ├── /jobs                 ├── /jobs             ├── ScorerAgent    │
+│   ├── /review ◄─────────────├── /apply ───────────├── TailorAgent   │
+│   ├── /applications         ├── /pipeline         ├── ApplierAgent  │
+│   ├── /sessions             ├── /sessions         ├── InboxAgent    │
+│   ├── /billing              ├── /billing          ├── SchedulerAgent│
+│   └── /agency               └── /tenants          └── CoachAgent    │
+│                                                                      │
+│   packages/                                                          │
+│   ├── resume-engine    (parse · voyage-3-lite embed · tailor)        │
+│   ├── job-scraper      (Playwright stealth · RemoteOK · Wellfound)   │
+│   ├── pipeline-tracker (Supabase transitions · Notion sync stub)     │
+│   └── shared           (Zod schemas · AgentJob discriminated union)  │
+│                                                                      │
+│   Queues (BullMQ + Redis):                                           │
+│   ├── discovery-queue (c=6)  → scout, score                         │
+│   ├── apply-queue (c=2)      → tailor, apply                        │
+│   ├── comms-queue (c=4)      → inbox, schedule, coach               │
+│   └── pitchfire:dlq          → failed jobs after 3 attempts         │
+│                                                                      │
+│   Data: Supabase (PostgreSQL + pgvector 1024-dim) + Redis            │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -84,13 +105,13 @@ cp .env.example .env.local
 docker-compose up -d
 
 # 4. Apply database migrations
-npx supabase db push
+pnpm supabase db push
 
 # 5. Start all services (web + api + agent worker, parallel via Turborepo)
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) — Swagger UI at [http://localhost:3001/api](http://localhost:3001/api).
+Open [http://localhost:3000](http://localhost:3000) — Swagger UI at [http://localhost:3001/docs](http://localhost:3001/docs).
 
 ---
 
@@ -121,6 +142,7 @@ Open [http://localhost:3000](http://localhost:3000) — Swagger UI at [http://lo
 | **3** | Communication Layer — InboxAgent + SchedulerAgent + 3 Queues | ✅ Complete | [#6](https://github.com/JawadulHadi/pitchfire/pull/6) |
 | **4** | Intelligence & Polish — Analytics + CoachAgent + Bull Board | ✅ Complete | — |
 | **5** | SaaS Layer — Stripe + Multi-tenant + Agency Mode | ✅ Complete | — |
+| **6** | Agent Bus + Polish — Inter-agent comms + structured logging | ✅ Complete | — |
 
 ---
 

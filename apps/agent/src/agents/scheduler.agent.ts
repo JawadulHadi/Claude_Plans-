@@ -1,7 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
 import type { Database, Json } from '@pitchfire/shared';
+import { createLogger } from '../lib/logger.js';
+import { MODELS, callWithRetry, logTokens } from '../lib/models.js';
+import { publishCoach } from '../lib/agent-bus.js';
 
+const log = createLogger('SchedulerAgent');
 const client = new Anthropic();
 
 export interface SchedulerInput {
@@ -16,7 +20,7 @@ export interface SchedulerOutput {
 }
 
 interface InterviewDetails {
-  interview_date: string;   // ISO8601
+  interview_date: string;
   duration_minutes: number;
   location: string | null;
   interviewers: string[];
@@ -41,22 +45,12 @@ const CALENDAR_TOOLS: Anthropic.Tool[] = [
   },
 ];
 
-/**
- * SchedulerAgent: Extracts interview details from email thread, creates a Google Calendar
- * event, generates Sonnet-quality prep notes, and records the session in Supabase.
- *
- * Pattern from R&D findings (Area 5):
- * - Haiku structured output to extract { interview_date, duration_minutes, location }
- * - If confidence < 0.8 → flag for user confirmation, do NOT auto-book
- * - Sonnet generates personalised prep notes per company + role
- */
 export async function runSchedulerAgent(input: SchedulerInput): Promise<SchedulerOutput> {
   const db = createClient<Database>(
     process.env.SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
 
-  // Fetch application + job details
   const { data: app } = await db
     .from('applications')
     .select('id, user_id, job_id, job_listings(title, company, jd_text, url)')
@@ -64,18 +58,20 @@ export async function runSchedulerAgent(input: SchedulerInput): Promise<Schedule
     .single();
 
   if (!app) {
-    console.error('[SchedulerAgent] Application not found:', input.application_id);
+    log.error('Application not found', { application_id: input.application_id });
     return { session_id: null, calendar_event_id: null, prep_notes_generated: false };
   }
 
   const job = (app.job_listings as unknown) as { title: string; company: string; jd_text: string; url: string } | null;
 
-  // Step 1: Extract interview details from email thread using Haiku
   const emailContent = await fetchEmailThread(input.email_thread_id);
   const details = await extractInterviewDetails(emailContent, job?.company ?? '');
 
   if (details.confidence < 0.8) {
-    console.log(`[SchedulerAgent] Low confidence (${details.confidence}) — flagging for user confirmation`);
+    log.warn('Low confidence — flagging for user confirmation', {
+      confidence: details.confidence,
+      application_id: input.application_id,
+    });
     await db.from('pipeline_events').insert({
       application_id: input.application_id,
       event_type: 'interview_needs_confirmation',
@@ -84,15 +80,9 @@ export async function runSchedulerAgent(input: SchedulerInput): Promise<Schedule
     return { session_id: null, calendar_event_id: null, prep_notes_generated: false };
   }
 
-  // Step 2: Generate prep notes with Sonnet
   const prepNotes = await generatePrepNotes(job, details);
-
-  // Step 3: Create calendar event
   const eventId = await createCalendarEvent(job, details, prepNotes);
-
-  // Step 4: Record interview session in Supabase
   const sessionType = inferSessionType(emailContent);
-  const endTime = new Date(new Date(details.interview_date).getTime() + details.duration_minutes * 60_000).toISOString();
 
   const { data: session } = await db
     .from('sessions')
@@ -109,7 +99,6 @@ export async function runSchedulerAgent(input: SchedulerInput): Promise<Schedule
     .select('id')
     .single();
 
-  // Update application status to interview
   await db.from('applications').update({ status: 'interview' }).eq('id', input.application_id);
 
   await db.from('pipeline_events').insert({
@@ -122,7 +111,19 @@ export async function runSchedulerAgent(input: SchedulerInput): Promise<Schedule
     },
   });
 
-  console.log(`[SchedulerAgent] Scheduled ${sessionType} for ${job?.company} at ${details.interview_date}`);
+  // Trigger CoachAgent to generate interview prep
+  if (session?.id) {
+    await publishCoach(session.id);
+    log.info('Session created — coach job published', { session_id: session.id, company: job?.company });
+  }
+
+  log.info('Interview scheduled', {
+    session_type: sessionType,
+    company: job?.company,
+    scheduled_at: details.interview_date,
+    calendar_event_id: eventId,
+  });
+
   return {
     session_id: session?.id ?? null,
     calendar_event_id: eventId,
@@ -130,19 +131,18 @@ export async function runSchedulerAgent(input: SchedulerInput): Promise<Schedule
   };
 }
 
-// ─── Interview detail extraction ─────────────────────────────────────────────
-
 async function extractInterviewDetails(
   emailContent: string,
   company: string,
 ): Promise<InterviewDetails> {
-  const response = await client.messages.create({
-    model: 'claude-haiku-5-5',
-    max_tokens: 256,
-    messages: [
-      {
-        role: 'user',
-        content: `Extract interview scheduling details from this email. Return ONLY valid JSON.
+  const response = await callWithRetry(
+    () => client.messages.create({
+      model: MODELS.FAST,
+      max_tokens: 256,
+      messages: [
+        {
+          role: 'user',
+          content: `Extract interview scheduling details from this email. Return ONLY valid JSON.
 
 Email:
 ${emailContent.slice(0, 2000)}
@@ -154,9 +154,13 @@ Return: {
   "interviewers": ["<name>", ...],
   "confidence": <0.0-1.0>
 }`,
-      },
-    ],
-  });
+        },
+      ],
+    }),
+    { agentName: 'SchedulerAgent' },
+  );
+
+  logTokens('SchedulerAgent', MODELS.FAST, response.usage, 'extract_interview_details');
 
   const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
   try {
@@ -179,21 +183,20 @@ Return: {
   }
 }
 
-// ─── Prep note generation ─────────────────────────────────────────────────────
-
 async function generatePrepNotes(
   job: { title: string; company: string; jd_text: string } | null,
   details: InterviewDetails,
 ): Promise<string> {
   if (!job) return '';
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 1024,
-    messages: [
-      {
-        role: 'user',
-        content: `Generate concise interview prep notes for a ${job.title} role at ${job.company}.
+  const response = await callWithRetry(
+    () => client.messages.create({
+      model: MODELS.QUALITY,
+      max_tokens: 1024,
+      messages: [
+        {
+          role: 'user',
+          content: `Generate concise interview prep notes for a ${job.title} role at ${job.company}.
 
 Job description excerpt:
 ${job.jd_text.slice(0, 1500)}
@@ -208,14 +211,15 @@ Include:
 4. One-sentence company context
 
 Format as plain Markdown.`,
-      },
-    ],
-  });
+        },
+      ],
+    }),
+    { agentName: 'SchedulerAgent' },
+  );
 
+  logTokens('SchedulerAgent', MODELS.QUALITY, response.usage, 'generate_prep_notes');
   return response.content[0].type === 'text' ? response.content[0].text : '';
 }
-
-// ─── Calendar event creation ──────────────────────────────────────────────────
 
 async function createCalendarEvent(
   job: { title: string; company: string } | null,
@@ -223,7 +227,7 @@ async function createCalendarEvent(
   prepNotes: string,
 ): Promise<string | null> {
   if (!process.env.GOOGLE_CALENDAR_ACCESS_TOKEN) {
-    console.log('[SchedulerAgent] Google Calendar not configured — skipping event creation');
+    log.debug('Google Calendar not configured — skipping event creation');
     return null;
   }
 
@@ -246,7 +250,7 @@ Description: Interview prep notes attached.`,
 
   for (let round = 0; round < 3; round++) {
     const response = await client.messages.create({
-      model: 'claude-haiku-5-5',
+      model: MODELS.FAST,
       max_tokens: 512,
       tools: CALENDAR_TOOLS,
       messages,
@@ -304,12 +308,10 @@ async function execCalendarCreate(input: {
     const data = await res.json() as Record<string, unknown>;
     return (data.id as string | undefined) ?? null;
   } catch (err) {
-    console.error('[SchedulerAgent] Calendar API error:', (err as Error).message);
+    log.error('Calendar API error', { error: (err as Error).message });
     return null;
   }
 }
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async function fetchEmailThread(threadId: string): Promise<string> {
   if (!process.env.GMAIL_ACCESS_TOKEN) return `Thread ID: ${threadId}`;

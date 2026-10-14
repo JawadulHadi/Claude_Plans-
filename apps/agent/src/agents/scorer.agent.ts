@@ -2,8 +2,14 @@ import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@pitchfire/shared';
 import { scoreResumeAgainstJd } from '@pitchfire/resume-engine';
+import { createLogger } from '../lib/logger.js';
+import { MODELS, callWithRetry, logTokens } from '../lib/models.js';
+import { publishTailor } from '../lib/agent-bus.js';
 
+const log = createLogger('ScorerAgent');
 const client = new Anthropic();
+
+const MATCH_THRESHOLD = 0.72;
 
 export interface ScorerInput {
   user_id: string;
@@ -15,19 +21,12 @@ export interface ScorerOutput {
   queued_for_tailor: number;
 }
 
-/**
- * ScorerAgent: Uses Claude Haiku (cheap/fast) to score all unscored jobs
- * against the user's resume. Jobs scoring > 0.72 are queued for tailoring.
- *
- * Model: claude-haiku-5-5 (from kedster pattern: cheap for filtering/routing)
- */
 export async function runScorerAgent(input: ScorerInput): Promise<ScorerOutput> {
   const db = createClient<Database>(
     process.env.SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
 
-  // Get active resume
   const { data: resume } = await db
     .from('resumes')
     .select('content_text')
@@ -35,11 +34,10 @@ export async function runScorerAgent(input: ScorerInput): Promise<ScorerOutput> 
     .single();
 
   if (!resume) {
-    console.error('[ScorerAgent] Resume not found:', input.resume_id);
+    log.error('Resume not found', { resume_id: input.resume_id });
     return { scored: 0, queued_for_tailor: 0 };
   }
 
-  // Get unscored jobs (not already in applications for this user)
   const { data: existingApps } = await db
     .from('applications')
     .select('job_id')
@@ -47,11 +45,13 @@ export async function runScorerAgent(input: ScorerInput): Promise<ScorerOutput> 
 
   const existingJobIds = (existingApps ?? []).map((a) => a.job_id);
 
-  const { data: jobs } = await db
-    .from('job_listings')
-    .select('id, title, company, jd_text')
-    .not('id', 'in', existingJobIds.length > 0 ? `(${existingJobIds.join(',')})` : '(null)')
-    .limit(50);
+  // BUG FIX: .not('id','in','(null)') matches ZERO rows when list is empty.
+  // Skip the filter entirely when there are no existing applications.
+  let query = db.from('job_listings').select('id, title, company, jd_text').limit(50);
+  if (existingJobIds.length > 0) {
+    query = query.not('id', 'in', `(${existingJobIds.join(',')})`);
+  }
+  const { data: jobs } = await query;
 
   let scored = 0;
   let queuedForTailor = 0;
@@ -59,10 +59,12 @@ export async function runScorerAgent(input: ScorerInput): Promise<ScorerOutput> 
   for (const job of jobs ?? []) {
     if (!job.jd_text) continue;
 
-    const result = await scoreResumeAgainstJd(resume.content_text, job.jd_text);
+    const result = await callWithRetry(
+      () => scoreResumeAgainstJd(resume.content_text, job.jd_text!),
+      { agentName: 'ScorerAgent' },
+    );
     scored++;
 
-    // Store application regardless of score (user can see all matches)
     const { data: app } = await db
       .from('applications')
       .insert({
@@ -75,13 +77,18 @@ export async function runScorerAgent(input: ScorerInput): Promise<ScorerOutput> 
       .select('id')
       .single();
 
-    if (app && result.score >= 0.72) {
+    if (app && result.score >= MATCH_THRESHOLD) {
       queuedForTailor++;
-      // In production: enqueue tailor job via BullMQ
-      console.log(`[ScorerAgent] High match (${result.score.toFixed(2)}): ${job.title} @ ${job.company}`);
+      await publishTailor(app.id);
+      log.info('High match — tailor queued', {
+        score: result.score.toFixed(2),
+        job_title: job.title,
+        company: job.company,
+        application_id: app.id,
+      });
     }
   }
 
-  console.log(`[ScorerAgent] Scored: ${scored}, Queued for tailor: ${queuedForTailor}`);
+  log.info('Scoring complete', { scored, queued_for_tailor: queuedForTailor });
   return { scored, queued_for_tailor: queuedForTailor };
 }

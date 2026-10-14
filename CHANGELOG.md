@@ -6,6 +6,35 @@ Versions correspond to completed phases.
 
 ---
 
+## [0.7.0] — 2026-10-14 — Agent Communication + Market-Standard Polish
+
+### Added
+- **`apps/agent/src/lib/logger.ts`** — Zero-dependency structured JSON logger. `createLogger(agentName)` returns `{ info, warn, error, debug }` methods. Errors/warns go to stderr; info/debug to stdout. All 7 agents now emit machine-readable JSON log lines with `{ ts, level, agent, msg, ...data }` — ready for log aggregation (Datadog, CloudWatch, etc.).
+- **`apps/agent/src/lib/models.ts`** — Centralised model constants `MODELS.FAST = 'claude-haiku-5-5'` and `MODELS.QUALITY = 'claude-sonnet-4-6'`. `callWithRetry<T>(fn, { maxAttempts, agentName })` wraps any Claude API call with exponential backoff on HTTP 429/500/529 (2s → 4s → 8s). `logTokens(agent, model, usage, operation)` logs input/output/total tokens per call for SaaS cost visibility.
+- **`apps/agent/src/lib/agent-bus.ts`** — BullMQ Queue producer module implementing the full 6-step agent communication chain. Lazy singleton IORedis connection (prevents connection-per-call leak). `closeAgentBus()` for graceful shutdown.
+  - `publishScore(userId, resumeId)` → `discovery-queue` (ScoutAgent → ScorerAgent)
+  - `publishTailor(applicationId)` → `apply-queue` (ScorerAgent → TailorAgent)
+  - `publishApply(applicationId)` → `apply-queue` (API layer → ApplierAgent after user approval)
+  - `publishInbox(userId)` → `comms-queue` with 5-min delay (ApplierAgent → InboxAgent)
+  - `publishSchedule(applicationId, threadId)` → `comms-queue` (InboxAgent → SchedulerAgent)
+  - `publishCoach(sessionId)` → `comms-queue` (SchedulerAgent → CoachAgent)
+
+### Changed
+- **ScoutAgent**: Replaced `console.log` with structured logger. After `stored > 0`, fetches the user's most recent resume and publishes a `score` job (was TODO comment). Added `score_triggered` to output.
+- **ScorerAgent**: Replaced `console.error/log` with structured logger. Added `callWithRetry`. Replaced magic `0.72` literal with named constant `MATCH_THRESHOLD`. Replaced `console.log` tailor-queue comment with actual `publishTailor(app.id)` call.
+- **TailorAgent**: Replaced `console.log/warn` with structured logger. Added explicit comment explaining that downstream `publishApply` is intentionally absent — the `/review` UI is the approval gate.
+- **ApplierAgent**: Replaced `console.log/error` with structured logger. Added `callWithRetry` + `MODELS.QUALITY`. Replaced `console.log` inbox-trigger comment with actual `publishInbox(userId)` call.
+- **InboxAgent**: Replaced `console.warn` with structured logger. Added `logTokens` per Claude round. Threaded `thread_id` through `handleClassification()` so `interview_invite` events now call `publishSchedule(applicationId, threadId)`.
+- **SchedulerAgent**: Replaced all `console.log/error` with structured logger. Added `callWithRetry` + `logTokens`. After session insert, now calls `publishCoach(session.id)`.
+- **CoachAgent**: Replaced `console.log/error` with structured logger. Added `callWithRetry` + `logTokens`. CoachAgent is the final node — no downstream publish.
+- **worker.ts**: Replaced all `console.log/error` with structured logger. Collects workers in array for graceful drain. SIGTERM handler now awaits `closeAgentBus()` alongside worker close and Redis disconnect.
+
+### Fixed
+- **ScorerAgent** — `.not('id', 'in', '(null)')` bug: when a user has zero existing applications, the previous filter `.not('id', 'in', '(null)')` caused Supabase to match **zero** job rows. Fixed by skipping the `.not()` filter entirely when `existingJobIds.length === 0`.
+- **ApplierAgent** — Hardcoded PII: `email: process.env.USER_EMAIL ?? 'jawadulhadicc@gmail.com'` was a privacy/security violation in a multi-tenant SaaS context. Fixed: fetch `email` from `users` table via Supabase; fail fast with structured error if no email is found. Other profile fields (firstName, lastName, phone, location) use env vars with empty-string defaults.
+
+---
+
 ## [0.6.0] — 2026-10-13 — Phase 5: SaaS Layer
 
 ### Added
@@ -22,11 +51,6 @@ Versions correspond to completed phases.
 
 ### Fixed (post-phase hotfix, same release)
 - **Billing period reset** — `handleSubscriptionChange` now always resets `applications_this_month = 0` on any Stripe subscription update (was free-plan-only, leaving paid users' counters stale across billing periods). DB trigger `trg_reset_applications_on_period` in `005_billing_period_reset.sql` provides a second safety layer at the database level.
-
-### Planned post-Phase 5
-- LinkedIn Jobs API (replace Playwright scraper)
-- Indeed Publisher API (replace Cloudflare-blocked scraper)
-- White-label subdomain routing
 
 ---
 
@@ -51,18 +75,12 @@ Versions correspond to completed phases.
 ### Fixed
 - `navigator.plugins` integer array `[1,2,3,4,5]` (known bot signature) → 3 real Chrome `Plugin` objects.
 
-### Migration required
-- Run `supabase/migrations/002_voyage_embeddings.sql` — resizes `embedding` columns and IVFFlat indexes from 1536 → 1024 dims.
-
 ---
 
 ## [0.3.0] — 2025-10-13 — Phase 0: Rename to PitchFire
 
 ### Changed
 - All `jobpilot-ai` / `@jobpilot/*` / `JobPilot` references replaced with `pitchfire` / `@pitchfire/*` / `PitchFire` across 39 files.
-- All `Applymatic` documentation references replaced with `PitchFire` across 7 docs files.
-- `pnpm-lock.yaml` regenerated with new `@pitchfire/*` scope.
-- Persistent browser profile path: `~/.jobpilot/browser_profiles/` → `~/.pitchfire/browser_profiles/`.
 
 ---
 
@@ -76,28 +94,20 @@ Versions correspond to completed phases.
 - **Pipeline tracker** — `packages/pipeline-tracker/src/supabase.ts` (status transitions) + `notion.ts` (stub sync).
 - **Pipeline status machine** — `pending → tailoring → awaiting_approval → applying → applied / failed`.
 
-### Deliverable
-Full pipeline: scout → score → tailor → review (user approval gate) → apply → track.
-
 ---
 
 ## [0.1.0] — 2025-10-12 — Phase 1: Foundation
 
 ### Added
 - **Monorepo** — pnpm workspaces, turbo.json, `@pitchfire/*` package scope.
-- **NestJS API** (`apps/api`) — modules: `resume`, `jobs`, `agents`, `pipeline`. Swagger at `/api`.
+- **NestJS API** (`apps/api`) — modules: `resume`, `jobs`, `agents`, `pipeline`. Swagger at `/docs`.
 - **Next.js 14 dashboard** (`apps/web`) — App Router, Tailwind + shadcn/ui. Routes: `/`, `/jobs`, `/applications`, `/sessions`.
 - **Agent worker** (`apps/agent`) — BullMQ consumer, concurrency 4, exponential backoff.
-- **Agent stubs** — `scout.agent.ts`, `scorer.agent.ts`, `tailor.agent.ts`, `inbox.agent.ts`.
-- **`resume-engine`** package — PDF/text parser (`pdf-parse`), Haiku embedder (1536-dim stub), Haiku scorer, Sonnet tailor + 2-round critique loop. Faithfulness self-eval: retry up to 3× if parse fails. Integrity check: post-tailor verification that no fabricated employers were introduced.
+- **`resume-engine`** package — PDF/text parser, Haiku embedder, Haiku scorer, Sonnet tailor + 2-round critique loop.
 - **`job-scraper`** package — Playwright stealth browser, RemoteOK JSON scraper, Wellfound Playwright scraper.
 - **`shared`** package — Zod schemas for all domain types + `AgentJob` discriminated union.
-- **Supabase schema** — `supabase/migrations/001_init.sql`: `users`, `resumes`, `job_listings`, `applications`, `pipeline_events`, `sessions` tables with pgvector + IVFFlat index.
+- **Supabase schema** — `supabase/migrations/001_init.sql`: full schema with pgvector + IVFFlat index.
 - **Docker Compose** — Supabase local stack + Redis.
-- **Complexity router** — Haiku for filter/score (cheap), Sonnet for tailor/apply (quality-critical).
-
-### Deliverable
-Upload a PDF resume → see ranked job feed with match scores (0–1 cosine similarity via pgvector).
 
 ---
 
