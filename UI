@@ -1,0 +1,354 @@
+
+🔥
+PitchFire
+v0.4
+Main
+⬛ Overview
+🔍 Matched Jobs 24
+📋 Applications
+✏️ Review Queue 3
+Pipeline
+📅 Sessions
+📊 Analytics
+System
+⚙️ Queues
+
+
+JH
+
+Jawad Ul Hadi
+Pro · $29/mo
+☰
+Overview
+3 agents active
+⚡ Auto Scout
+
+Dashboard
+Jobs (24)
+Applications
+Review (3)
+Sessions
+Analytics
+Queues
+
+
+
+
+Jobs Matched
+147
+↑ 24 new today
+
+Applications Sent
+38
+↑ 4 this week
+
+Reply Rate
+31%
+↑ avg is 8%
+
+Interviews
+5
+2 this week
+
+
+
+Pipeline Funnel
+View analytics →
+
+
+Scouted
+
+147
+100%
+
+Scored ≥ 0.72
+
+97
+66%
+
+Tailored
+
+57
+39%
+
+Applied
+
+38
+26%
+
+Replied
+
+12
+8%
+
+Interview
+
+5
+3%
+
+
+Upcoming Sessions
+All →
+
+
+Stripe
+Backend Lead Engineer
+🗓 Tomorrow, 2:00 PM · 60 min
+📝 Prep notes ready — 3 likely questions
+
+Vercel
+Staff Engineer, Infra
+🗓 Thu 17 Oct · 10:00 AM · 45 min
+📝 Prep notes ready — system design focus
+
+Linear
+Senior Backend Engineer
+⚠ Pending confirmation — date unclear
+Confidence 0.62 — flagged for user review
+
+
+Top Matches Today
+See all 24 →
+
+
+🟣
+
+Backend Lead Engineer — NestJS / GraphQL
+StripeRemote · USWellfoundPosted 2h ago
+Tailored
+0.91
+
+⚫
+
+Staff Engineer — AI Infrastructure
+VercelRemote · WorldwideRemoteOKPosted 5h ago
+Scoring
+0.87
+
+🔵
+
+Senior Backend Engineer — Node.js / PostgreSQL
+LinearRemote · EU/USWellfoundPosted 1d ago
+Queued
+0.83
+
+
+
+All Applications
+38 total
+
+Company / Role
+Board
+Score
+Status
+Applied
+ 
+Stripe
+Backend Lead Engineer
+Wellfound
+0.91
+● Interview
+Oct 11
+Vercel
+Staff Engineer, Infra
+RemoteOK
+0.87
+● Interview
+Oct 9
+Anthropic
+Senior Backend Engineer
+Wellfound
+0.89
+● Applied
+Oct 12
+Linear
+Senior Backend Engineer
+Wellfound
+0.83
+● Reviewing
+Oct 12
+Resend
+Backend Lead
+RemoteOK
+0.80
+● Tailoring
+—
+Acme Corp
+Principal Engineer
+LinkedIn
+0.74
+● Rejected
+Oct 5
+
+
+
+3 applications waiting for your approval before submission. Review the tailored resume and cover letter, then approve or withdraw.
+
+
+🟣
+Resend — Backend Lead
+Score: 0.80 · RemoteOK · Applied variant A
+Awaiting approval
+
+Tailored Resume Highlights
+· Led migration to NestJS microservices reducing integration complexity by 60%
+· Reduced API latency from 12s → 2s (83% improvement) via Redis caching layer
+· Built AI-assisted email delivery pipeline handling 2M+ events/day (matches JD emphasis on scale)
+✓ Approve & Submit ✗ Withdraw Edit variant
+
+
+🔵
+Linear — Senior Backend Engineer
+Score: 0.83 · Wellfound · Applied variant B
+Awaiting approval
+
+Tailored Resume Highlights
+· Built real-time event-driven architecture with BullMQ + Redis (aligns with Linear's infra stack)
+· Designed pgvector similarity search pipeline processing 10k+ job embeddings per scan
+· TypeScript-first NestJS API with 99.9% uptime over 18-month production run
+✓ Approve & Submit ✗ Withdraw Edit variant
+
+
+
+Upcoming
+3
+Next: tomorrow 2pm
+
+Prep Notes
+2 ready
+Sonnet-generated
+
+Completed
+2
+1 offer received
+
+Flagged
+1
+Confidence < 0.8
+
+
+All Sessions
+
+Company / Role
+Type
+Scheduled
+Duration
+Prep
+Status
+ 
+Stripe
+Backend Lead Engineer
+Technical
+Oct 14, 2:00 PM
+60 min
+Ready
+Upcoming
+Vercel
+Staff Engineer, Infra
+System Design
+Oct 17, 10:00 AM
+45 min
+Ready
+Upcoming
+Linear
+Senior Backend Engineer
+Intro call
+TBC
+30 min
+Flagged
+Pending
+
+
+
+
+Avg Match Score
+0.79
+↑ was 0.71 last month
+
+Apply-to-Reply
+31%
+↑ industry avg 8%
+
+Reply-to-Interview
+42%
+↑ strong signal
+
+Est. Cost / Week
+$1.04
+Claude API + Voyage
+
+
+Weekly Activity
+Sep 16 Sep 23 Sep 30 Oct 7 Oct 10 Oct 12 Today Jobs scouted Applications sent
+
+
+
+discovery-queue
+6
+concurrency · scout, score
+
+apply-queue
+2
+concurrency · tailor, apply
+
+comms-queue
+4
+concurrency · inbox, schedule
+
+DLQ depth
+0
+All clear
+
+
+Queue Health
+
+
+discovery-queue 4 active · 12 waiting · 0 failed
+
+apply-queue 1 active · 3 waiting · 0 failed
+
+comms-queue 2 active · 0 waiting · 0 failed
+
+pitchfire:dlq 0 items — all clear
+💡 Bull Board admin UI is planned for Phase 4 at /admin/queues behind ADMIN_TOKEN auth. For now, monitor via Redis CLI or this panel.
+
+
+
+Matched Jobs
+24 new · threshold 0.72
+
+
+🟣
+
+Backend Lead Engineer — NestJS / GraphQL
+StripeRemote · USWellfound
+Tailored
+0.91
+
+⚫
+
+Staff Engineer — AI Infrastructure
+VercelRemote · WorldwideRemoteOK
+Tailored
+0.87
+
+🟠
+
+Senior Backend Engineer — Node.js / PostgreSQL
+LinearRemote · EU/USWellfound
+Queued
+0.83
+
+🔴
+
+Backend Lead — Email Infrastructure
+ResendRemote · WorldwideRemoteOK
+Queued
+0.80
+
+🟢
+
+Senior Full-Stack Engineer
+TursoRemote · WorldwideRemoteOK
+Pending
+0.76
